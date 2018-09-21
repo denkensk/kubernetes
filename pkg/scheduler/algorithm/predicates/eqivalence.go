@@ -16,7 +16,7 @@ limitations under the License.
 
 // Package equivalence defines Pod equivalence classes and the equivalence class
 // cache.
-package equivalence
+package predicates
 
 import (
 	"fmt"
@@ -29,7 +29,7 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
-	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
+	//"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
@@ -46,9 +46,14 @@ type Cache struct {
 	sync.Map
 }
 
+var cache *Cache
+
 // NewCache create an empty equiv class cache.
 func NewCache() *Cache {
-	return new(Cache)
+	if cache == nil {
+		cache = new(Cache)
+	}
+	return cache
 }
 
 // NodeCache saves and reuses the output of predicate functions. Use RunPredicate to
@@ -79,6 +84,14 @@ func (c *Cache) GetNodeCache(name string) (nodeCache *NodeCache, exists bool) {
 	v, exists := c.LoadOrStore(name, newNodeCache())
 	nodeCache = v.(*NodeCache)
 	return
+}
+
+// LoadNodeCache returns the existing NodeCache for given node if present.
+// The boolean flag is true if the value was loaded, false if nil.
+func (c *Cache) LoadNodeCache(name string) (nodeCache *NodeCache, exists bool) {
+	v, exists := c.Load(name)
+	nodeCache = v.(*NodeCache)
+	return nodeCache, exists
 }
 
 // InvalidatePredicates clears all cached results for the given predicates.
@@ -131,29 +144,29 @@ func (c *Cache) InvalidateCachedPredicateItemForPodAdd(pod *v1.Pod, nodeName str
 	// it will also fits to equivalence class of existing pods
 
 	// GeneralPredicates: will always be affected by adding a new pod
-	invalidPredicates := sets.NewString(predicates.GeneralPred)
+	invalidPredicates := sets.NewString(GeneralPred)
 
 	// MaxPDVolumeCountPredicate: we check the volumes of pod to make decisioc.
 	for _, vol := range pod.Spec.Volumes {
 		if vol.PersistentVolumeClaim != nil {
 			invalidPredicates.Insert(
-				predicates.MaxEBSVolumeCountPred,
-				predicates.MaxGCEPDVolumeCountPred,
-				predicates.MaxAzureDiskVolumeCountPred)
+				MaxEBSVolumeCountPred,
+				MaxGCEPDVolumeCountPred,
+				MaxAzureDiskVolumeCountPred)
 			if utilfeature.DefaultFeatureGate.Enabled(features.AttachVolumeLimit) {
-				invalidPredicates.Insert(predicates.MaxCSIVolumeCountPred)
+				invalidPredicates.Insert(MaxCSIVolumeCountPred)
 			}
 		} else {
 			// We do not consider CSI volumes here because CSI
 			// volumes can not be used inline.
 			if vol.AWSElasticBlockStore != nil {
-				invalidPredicates.Insert(predicates.MaxEBSVolumeCountPred)
+				invalidPredicates.Insert(MaxEBSVolumeCountPred)
 			}
 			if vol.GCEPersistentDisk != nil {
-				invalidPredicates.Insert(predicates.MaxGCEPDVolumeCountPred)
+				invalidPredicates.Insert(MaxGCEPDVolumeCountPred)
 			}
 			if vol.AzureDisk != nil {
-				invalidPredicates.Insert(predicates.MaxAzureDiskVolumeCountPred)
+				invalidPredicates.Insert(MaxAzureDiskVolumeCountPred)
 			}
 		}
 	}
@@ -215,7 +228,6 @@ func (n *NodeCache) RunPredicate(
 		// This may happen during tests.
 		return false, []algorithm.PredicateFailureReason{}, fmt.Errorf("nodeInfo is nil or node is invalid")
 	}
-
 	result, ok := n.lookupResult(pod.GetName(), nodeInfo.Node().GetName(), predicateKey, equivClass.hash)
 	if ok {
 		return result.Fit, result.FailReasons, nil
@@ -227,6 +239,40 @@ func (n *NodeCache) RunPredicate(
 	if cache != nil {
 		n.updateResult(pod.GetName(), predicateKey, fit, reasons, equivClass.hash, cache, nodeInfo)
 	}
+	return fit, reasons, nil
+}
+
+// RunPredicate returns a cached predicate result. In case of a cache miss, the predicate will be
+// run and its results cached for the next call.
+//
+// NOTE: RunPredicate will not update the equivalence cache if the given NodeInfo is stale.
+func (n *NodeCache) Run(
+	pred algorithm.FitPredicate,
+	predicateKey string,
+	pod *v1.Pod,
+	meta algorithm.PredicateMetadata,
+	nodeInfo *schedulercache.NodeInfo,
+	equivClass *Class,
+) (bool, []algorithm.PredicateFailureReason, error) {
+	if nodeInfo == nil || nodeInfo.Node() == nil {
+		// This may happen during tests.
+		return false, []algorithm.PredicateFailureReason{}, fmt.Errorf("nodeInfo is nil or node is invalid")
+	}
+	result, ok := n.lookupResult(pod.GetName(), nodeInfo.Node().GetName(), predicateKey, equivClass.hash)
+
+	if ok {
+		return result.Fit, result.FailReasons, nil
+	}
+	//metaNew := meta.ShallowCopy()
+	//metaNew.(*predicateMetadata).ECache = nil
+	meta.(*predicateMetadata).ECache = nil
+	fit, reasons, err := pred(pod, meta, nodeInfo)
+	if err != nil {
+		return fit, reasons, err
+	}
+	//if cache != nil {
+	n.updateResult(pod.GetName(), predicateKey, fit, reasons, equivClass.hash, nil, nodeInfo)
+	//}
 	return fit, reasons, nil
 }
 
@@ -245,10 +291,10 @@ func (n *NodeCache) updateResult(
 		return
 	}
 	// Skip update if NodeInfo is stale.
-	if !cache.IsUpToDate(nodeInfo) {
-		metrics.EquivalenceCacheWrites.WithLabelValues("discarded_stale").Inc()
-		return
-	}
+	//if !cache.IsUpToDate(nodeInfo) {
+	//	metrics.EquivalenceCacheWrites.WithLabelValues("discarded_stale").Inc()
+	//	return
+	//}
 
 	predicateItem := predicateResult{
 		Fit:         fit,

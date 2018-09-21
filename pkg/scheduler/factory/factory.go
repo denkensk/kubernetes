@@ -56,11 +56,11 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
+	//"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates/equivalence"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	"k8s.io/kubernetes/pkg/scheduler/api/validation"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 	"k8s.io/kubernetes/pkg/scheduler/core"
-	"k8s.io/kubernetes/pkg/scheduler/core/equivalence"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
 )
@@ -123,7 +123,7 @@ type configFactory struct {
 	hardPodAffinitySymmetricWeight int32
 
 	// Equivalence class cache
-	equivalencePodCache *equivalence.Cache
+	equivalencePodCache *predicates.Cache
 
 	// Enable equivalence class cache
 	enableEquivalenceClassCache bool
@@ -1178,7 +1178,7 @@ func (c *configFactory) CreateFromKeys(predicateKeys, priorityKeys sets.String, 
 
 	// Init equivalence class cache
 	if c.enableEquivalenceClassCache {
-		c.equivalencePodCache = equivalence.NewCache()
+		c.equivalencePodCache = predicates.NewCache()
 		glog.Info("Created equivalence class cache")
 	}
 

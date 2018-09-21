@@ -46,7 +46,16 @@ func NewCSIMaxVolumeLimitPredicate(
 
 func (c *CSIMaxVolumeLimitChecker) attachableLimitPredicate(
 	pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
-
+	if meta != nil {
+		if meta.(*predicateMetadata).ECache != nil {
+			nodeCache, _ := meta.(*predicateMetadata).ECache.LoadNodeCache(nodeInfo.Node().Name)
+			equivClass := NewClass(pod)
+			if nodeCache != nil && equivClass != nil {
+				fit, reasons, err := nodeCache.Run(c.attachableLimitPredicate, MaxCSIVolumeCountPred, pod, meta, nodeInfo, equivClass)
+				return fit, reasons, err
+			}
+		}
+	}
 	// if feature gate is disable we return
 	if !utilfeature.DefaultFeatureGate.Enabled(features.AttachVolumeLimit) {
 		return true, nil, nil

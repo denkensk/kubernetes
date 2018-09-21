@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
+	//"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates/equivalence"
 	priorityutil "k8s.io/kubernetes/pkg/scheduler/algorithm/priorities/util"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 	schedutil "k8s.io/kubernetes/pkg/scheduler/util"
@@ -87,6 +88,7 @@ type predicateMetadata struct {
 	// which should be accounted only by the extenders. This set is synthesized
 	// from scheduler extender configuration and does not change per pod.
 	ignoredExtendedResources sets.String
+	ECache                   *Cache
 }
 
 // Ensure that predicateMetadata implements algorithm.PredicateMetadata.
@@ -142,6 +144,7 @@ func (pfactory *PredicateMetadataFactory) GetMetadata(pod *v1.Pod, nodeNameToInf
 		glog.Errorf("[predicate meta data generation] error finding pods that match affinity terms: %v", err)
 		return nil
 	}
+
 	predicateMetadata := &predicateMetadata{
 		pod:           pod,
 		podBestEffort: isPodBestEffort(pod),
@@ -150,6 +153,7 @@ func (pfactory *PredicateMetadataFactory) GetMetadata(pod *v1.Pod, nodeNameToInf
 		topologyPairsPotentialAffinityPods:     incomingPodAffinityMap,
 		topologyPairsPotentialAntiAffinityPods: incomingPodAntiAffinityMap,
 		topologyPairsAntiAffinityPodsMap:       existingPodAntiAffinityMap,
+		ECache: cache,
 	}
 	for predicateName, precomputeFunc := range predicateMetadataProducers {
 		glog.V(10).Infof("Precompute: %v", predicateName)
@@ -291,6 +295,7 @@ func (meta *predicateMetadata) ShallowCopy() algorithm.PredicateMetadata {
 		podRequest:               meta.podRequest,
 		serviceAffinityInUse:     meta.serviceAffinityInUse,
 		ignoredExtendedResources: meta.ignoredExtendedResources,
+		ECache: meta.ECache,
 	}
 	newPredMeta.podPorts = append([]*v1.ContainerPort(nil), meta.podPorts...)
 	newPredMeta.topologyPairsPotentialAffinityPods = newTopologyPairsMaps()
