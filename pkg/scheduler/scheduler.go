@@ -19,6 +19,7 @@ package scheduler
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"time"
 
 	"k8s.io/api/core/v1"
@@ -39,7 +40,6 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	latestschedulerapi "k8s.io/kubernetes/pkg/scheduler/api/latest"
-	"k8s.io/kubernetes/pkg/scheduler/apis/config"
 	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 	"k8s.io/kubernetes/pkg/scheduler/core"
@@ -49,7 +49,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
 
 	"github.com/golang/glog"
-	"os"
+	"k8s.io/kubernetes/pkg/scheduler/factory"
 )
 
 // Binder knows how to write a binding.
@@ -168,7 +168,7 @@ type schedulerOptions struct {
 	disablePreemption              bool
 	percentageOfNodesToScore       int32
 	bindTimeoutSeconds             int64
-	schedulerAlgorithmSource       config.SchedulerAlgorithmSource
+	schedulerAlgorithmSource       kubeschedulerconfig.SchedulerAlgorithmSource
 }
 
 type SchedulerOption func(*schedulerOptions)
@@ -216,7 +216,7 @@ func WithBindTimeoutSeconds(r int64) SchedulerOption {
 }
 
 // WithSchedulerAlgorithmSource set schedulerAlgorithmSource for Scheduler
-func WithSchedulerAlgorithmSource(r config.SchedulerAlgorithmSource) SchedulerOption {
+func WithSchedulerAlgorithmSource(r kubeschedulerconfig.SchedulerAlgorithmSource) SchedulerOption {
 	return func(o *schedulerOptions) {
 		o.schedulerAlgorithmSource = r
 	}
@@ -228,7 +228,7 @@ var defaultSchedulerOptions = schedulerOptions{
 	enableEquivalenceClassCache:    false,
 	disablePreemption:              false,
 	percentageOfNodesToScore:       schedulerapi.DefaultPercentageOfNodesToScore,
-	bindTimeoutSeconds:             600,
+	bindTimeoutSeconds:             kubeschedulerconfig.BindTimeoutSeconds,
 	schedulerAlgorithmSource:       kubeschedulerconfig.SchedulerAlgorithmSource{},
 }
 

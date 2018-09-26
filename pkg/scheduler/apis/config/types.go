@@ -35,6 +35,9 @@ const (
 
 	// SchedulerDefaultProviderName defines the default provider names
 	SchedulerDefaultProviderName = "DefaultProvider"
+
+	// BindTimeoutSeconds defines the default bind timeout
+	BindTimeoutSeconds = 100
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
