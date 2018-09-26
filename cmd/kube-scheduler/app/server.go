@@ -138,24 +138,14 @@ func Run(c schedulerserverconfig.CompletedConfig, stopCh <-chan struct{}) error 
 		return fmt.Errorf("unable to register configz: %s", err)
 	}
 
-	var storageClassInformer storageinformers.StorageClassInformer
-	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeScheduling) {
-		storageClassInformer = c.InformerFactory.Storage().V1().StorageClasses()
-	}
-
-	// Create the scheduler.
-	sched, err := scheduler.New(c.Client, c.InformerFactory.Core().V1().Nodes(), c.PodInformer,
-		c.InformerFactory.Core().V1().PersistentVolumes(), c.InformerFactory.Core().V1().PersistentVolumeClaims(),
-		c.InformerFactory.Core().V1().ReplicationControllers(), c.InformerFactory.Apps().V1().ReplicaSets(),
-		c.InformerFactory.Apps().V1().StatefulSets(), c.InformerFactory.Core().V1().Services(),
-		c.InformerFactory.Policy().V1beta1().PodDisruptionBudgets(), storageClassInformer, c.Recorder,
-		scheduler.WithSchedulerName(c.ComponentConfig.SchedulerName), scheduler.WithHardPodAffinitySymmetricWeight(c.ComponentConfig.HardPodAffinitySymmetricWeight),
-		scheduler.WithEnableEquivalenceClassCache(c.ComponentConfig.EnableContentionProfiling),
-		scheduler.WithDisablePreemption(c.ComponentConfig.DisablePreemption), scheduler.WithPercentageOfNodesToScore(c.ComponentConfig.PercentageOfNodesToScore),
-		scheduler.WithBindTimeoutSeconds(*c.ComponentConfig.BindTimeoutSeconds), scheduler.WithSchedulerAlgorithmSource(c.ComponentConfig.AlgorithmSource))
+	// Build a scheduler config from the provided algorithm source.
+	schedulerConfig, err := NewSchedulerConfig(c)
 	if err != nil {
 		return err
 	}
+
+	// Create the scheduler.
+	sched := scheduler.NewFromConfig(schedulerConfig)
 
 	// Prepare the event broadcaster.
 	if c.Broadcaster != nil && c.EventClient != nil {
