@@ -21,13 +21,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	goruntime "runtime"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
@@ -49,10 +46,7 @@ import (
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/scheduler"
 	"k8s.io/kubernetes/pkg/scheduler/algorithmprovider"
-	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
-	latestschedulerapi "k8s.io/kubernetes/pkg/scheduler/api/latest"
 	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
-	"k8s.io/kubernetes/pkg/scheduler/factory"
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 	"k8s.io/kubernetes/pkg/util/configz"
 	utilflag "k8s.io/kubernetes/pkg/util/flag"
@@ -138,14 +132,24 @@ func Run(c schedulerserverconfig.CompletedConfig, stopCh <-chan struct{}) error 
 		return fmt.Errorf("unable to register configz: %s", err)
 	}
 
-	// Build a scheduler config from the provided algorithm source.
-	schedulerConfig, err := NewSchedulerConfig(c)
-	if err != nil {
-		return err
+	var storageClassInformer storageinformers.StorageClassInformer
+	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeScheduling) {
+		storageClassInformer = c.InformerFactory.Storage().V1().StorageClasses()
 	}
 
 	// Create the scheduler.
-	sched := scheduler.NewFromConfig(schedulerConfig)
+	sched, err := scheduler.New(c.Client, c.InformerFactory.Core().V1().Nodes(), c.PodInformer,
+		c.InformerFactory.Core().V1().PersistentVolumes(), c.InformerFactory.Core().V1().PersistentVolumeClaims(),
+		c.InformerFactory.Core().V1().ReplicationControllers(), c.InformerFactory.Apps().V1().ReplicaSets(),
+		c.InformerFactory.Apps().V1().StatefulSets(), c.InformerFactory.Core().V1().Services(),
+		c.InformerFactory.Policy().V1beta1().PodDisruptionBudgets(), storageClassInformer, c.Recorder,
+		scheduler.WithSchedulerName(c.ComponentConfig.SchedulerName), scheduler.WithHardPodAffinitySymmetricWeight(c.ComponentConfig.HardPodAffinitySymmetricWeight),
+		scheduler.WithEnableEquivalenceClassCache(c.ComponentConfig.EnableContentionProfiling),
+		scheduler.WithDisablePreemption(c.ComponentConfig.DisablePreemption), scheduler.WithPercentageOfNodesToScore(c.ComponentConfig.PercentageOfNodesToScore),
+		scheduler.WithBindTimeoutSeconds(*c.ComponentConfig.BindTimeoutSeconds), scheduler.WithSchedulerAlgorithmSource(c.ComponentConfig.AlgorithmSource))
+	if err != nil {
+		return err
+	}
 
 	// Prepare the event broadcaster.
 	if c.Broadcaster != nil && c.EventClient != nil {
@@ -278,92 +282,4 @@ func newHealthzHandler(config *kubeschedulerconfig.KubeSchedulerConfiguration, s
 		}
 	}
 	return pathRecorderMux
-}
-
-// NewSchedulerConfig creates the scheduler configuration. This is exposed for use by tests.
-func NewSchedulerConfig(s schedulerserverconfig.CompletedConfig) (*scheduler.Config, error) {
-	var storageClassInformer storageinformers.StorageClassInformer
-	if utilfeature.DefaultFeatureGate.Enabled(features.VolumeScheduling) {
-		storageClassInformer = s.InformerFactory.Storage().V1().StorageClasses()
-	}
-
-	// Set up the configurator which can create schedulers from configs.
-	configurator := factory.NewConfigFactory(&factory.ConfigFactoryArgs{
-		SchedulerName:                  s.ComponentConfig.SchedulerName,
-		Client:                         s.Client,
-		NodeInformer:                   s.InformerFactory.Core().V1().Nodes(),
-		PodInformer:                    s.PodInformer,
-		PvInformer:                     s.InformerFactory.Core().V1().PersistentVolumes(),
-		PvcInformer:                    s.InformerFactory.Core().V1().PersistentVolumeClaims(),
-		ReplicationControllerInformer:  s.InformerFactory.Core().V1().ReplicationControllers(),
-		ReplicaSetInformer:             s.InformerFactory.Apps().V1().ReplicaSets(),
-		StatefulSetInformer:            s.InformerFactory.Apps().V1().StatefulSets(),
-		ServiceInformer:                s.InformerFactory.Core().V1().Services(),
-		PdbInformer:                    s.InformerFactory.Policy().V1beta1().PodDisruptionBudgets(),
-		StorageClassInformer:           storageClassInformer,
-		HardPodAffinitySymmetricWeight: s.ComponentConfig.HardPodAffinitySymmetricWeight,
-		EnableEquivalenceClassCache:    utilfeature.DefaultFeatureGate.Enabled(features.EnableEquivalenceClassCache),
-		DisablePreemption:              s.ComponentConfig.DisablePreemption,
-		PercentageOfNodesToScore:       s.ComponentConfig.PercentageOfNodesToScore,
-		BindTimeoutSeconds:             *s.ComponentConfig.BindTimeoutSeconds,
-	})
-
-	source := s.ComponentConfig.AlgorithmSource
-	var config *scheduler.Config
-	switch {
-	case source.Provider != nil:
-		// Create the config from a named algorithm provider.
-		sc, err := configurator.CreateFromProvider(*source.Provider)
-		if err != nil {
-			return nil, fmt.Errorf("couldn't create scheduler using provider %q: %v", *source.Provider, err)
-		}
-		config = sc
-	case source.Policy != nil:
-		// Create the config from a user specified policy source.
-		policy := &schedulerapi.Policy{}
-		switch {
-		case source.Policy.File != nil:
-			// Use a policy serialized in a file.
-			policyFile := source.Policy.File.Path
-			_, err := os.Stat(policyFile)
-			if err != nil {
-				return nil, fmt.Errorf("missing policy config file %s", policyFile)
-			}
-			data, err := ioutil.ReadFile(policyFile)
-			if err != nil {
-				return nil, fmt.Errorf("couldn't read policy config: %v", err)
-			}
-			err = runtime.DecodeInto(latestschedulerapi.Codec, []byte(data), policy)
-			if err != nil {
-				return nil, fmt.Errorf("invalid policy: %v", err)
-			}
-		case source.Policy.ConfigMap != nil:
-			// Use a policy serialized in a config map value.
-			policyRef := source.Policy.ConfigMap
-			policyConfigMap, err := s.Client.CoreV1().ConfigMaps(policyRef.Namespace).Get(policyRef.Name, metav1.GetOptions{})
-			if err != nil {
-				return nil, fmt.Errorf("couldn't get policy config map %s/%s: %v", policyRef.Namespace, policyRef.Name, err)
-			}
-			data, found := policyConfigMap.Data[kubeschedulerconfig.SchedulerPolicyConfigMapKey]
-			if !found {
-				return nil, fmt.Errorf("missing policy config map value at key %q", kubeschedulerconfig.SchedulerPolicyConfigMapKey)
-			}
-			err = runtime.DecodeInto(latestschedulerapi.Codec, []byte(data), policy)
-			if err != nil {
-				return nil, fmt.Errorf("invalid policy: %v", err)
-			}
-		}
-		sc, err := configurator.CreateFromConfig(*policy)
-		if err != nil {
-			return nil, fmt.Errorf("couldn't create scheduler from policy: %v", err)
-		}
-		config = sc
-	default:
-		return nil, fmt.Errorf("unsupported algorithm source: %v", source)
-	}
-	// Additional tweaks to the config produced by the configurator.
-	config.Recorder = s.Recorder
-
-	config.DisablePreemption = s.ComponentConfig.DisablePreemption
-	return config, nil
 }

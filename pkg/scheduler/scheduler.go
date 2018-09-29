@@ -35,15 +35,22 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
-	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 	"k8s.io/kubernetes/pkg/scheduler/core"
 	"k8s.io/kubernetes/pkg/scheduler/core/equivalence"
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
+	storagelisters "k8s.io/client-go/listers/storage/v1"
 
 	"github.com/golang/glog"
+	"fmt"
+	"os"
+	"io/ioutil"
+	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
+	"k8s.io/apimachinery/pkg/runtime"
+	latestschedulerapi "k8s.io/kubernetes/pkg/scheduler/api/latest"
+	"os/signal"
 )
 
 // Binder knows how to write a binding.
@@ -237,7 +244,136 @@ func New(client clientset.Interface,
 		opt(&options)
 	}
 
-	return nil, nil
+	// Set up the configurator which can create schedulers from configs.
+	//configurator := factory.NewConfigFactory(&factory.ConfigFactoryArgs{
+	//	SchedulerName:                  options.schedulerName,
+	//	Client:                         client,
+	//	NodeInformer:                   nodeInformer,
+	//	PodInformer:                    podInformer,
+	//	PvInformer:                     pvInformer,
+	//	PvcInformer:                    pvcInformer,
+	//	ReplicationControllerInformer:  replicationControllerInformer,
+	//	ReplicaSetInformer:             replicaSetInformer,
+	//	StatefulSetInformer:            statefulSetInformer,
+	//	ServiceInformer:                serviceInformer,
+	//	PdbInformer:                    pdbInformer,
+	//	StorageClassInformer:           storageClassInformer,
+	//	HardPodAffinitySymmetricWeight: options.hardPodAffinitySymmetricWeight,
+	//	EnableEquivalenceClassCache:    options.enableEquivalenceClassCache,
+	//	DisablePreemption:              options.disablePreemption,
+	//	PercentageOfNodesToScore:       options.percentageOfNodesToScore,
+	//	BindTimeoutSeconds:             options.bindTimeoutSeconds,
+	//})
+
+	// start // move factory NewConfigFactory to here
+	stopEverything := make(chan struct{})
+	schedulerCache := schedulercache.New(30*time.Second, stopEverything)
+
+	// storageClassInformer is only enabled through VolumeScheduling feature gate
+	var storageClassLister storagelisters.StorageClassLister
+	if args.StorageClassInformer != nil {
+		storageClassLister = args.StorageClassInformer.Lister()
+	}
+	c := &configFactory{
+		client:                         args.Client,
+		podLister:                      schedulerCache,
+		podQueue:                       core.NewSchedulingQueue(),
+		storageClassLister:             storageClassLister,
+		schedulerCache:                 schedulerCache,
+		StopEverything:                 stopEverything,
+		schedulerName:                  args.SchedulerName,
+		hardPodAffinitySymmetricWeight: args.HardPodAffinitySymmetricWeight,
+		enableEquivalenceClassCache:    args.EnableEquivalenceClassCache,
+		disablePreemption:              args.DisablePreemption,
+		percentageOfNodesToScore:       args.PercentageOfNodesToScore,
+	}
+
+	scheduler := &Scheduler{
+		SchedulerCache: schedulerCache,
+		Ecache     *equivalence.Cache
+		NodeLister algorithm.NodeLister
+		Algorithm  algorithm.ScheduleAlgorithm
+		GetBinder  func(pod *v1.Pod) Binder
+		PodConditionUpdater PodConditionUpdater
+		PodPreemptor PodPreemptor
+		NextPod func() *v1.Pod
+		WaitForCacheSync func() bool
+		Error func(*v1.Pod, error)
+		Recorder record.EventRecorder
+		StopEverything: stopEverything,
+		VolumeBinder *volumebinder.VolumeBinder
+		DisablePreemption: options.disablePreemption,
+	}
+
+	go func() {
+		for {
+			select {
+			case <-s.StopEverything:
+				return
+			}
+		}
+	}()
+	// end // move factory NewConfigFactory to here
+
+	var config *Config
+	source := options.schedulerAlgorithmSource
+	switch {
+	case source.Provider != nil:
+		// Create the config from a named algorithm provider.
+		sc, err := configurator.CreateFromProvider(*source.Provider)
+		if err != nil {
+			return nil, fmt.Errorf("couldn't create scheduler using provider %q: %v", *source.Provider, err)
+		}
+		config = sc
+	case source.Policy != nil:
+		// Create the config from a user specified policy source.
+		policy := &schedulerapi.Policy{}
+		switch {
+		case source.Policy.File != nil:
+			// Use a policy serialized in a file.
+			policyFile := source.Policy.File.Path
+			_, err := os.Stat(policyFile)
+			if err != nil {
+				return nil, fmt.Errorf("missing policy config file %s", policyFile)
+			}
+			data, err := ioutil.ReadFile(policyFile)
+			if err != nil {
+				return nil, fmt.Errorf("couldn't read policy config: %v", err)
+			}
+			err = runtime.DecodeInto(latestschedulerapi.Codec, []byte(data), policy)
+			if err != nil {
+				return nil, fmt.Errorf("invalid policy: %v", err)
+			}
+		case source.Policy.ConfigMap != nil:
+			// Use a policy serialized in a config map value.
+			policyRef := source.Policy.ConfigMap
+			policyConfigMap, err := client.CoreV1().ConfigMaps(policyRef.Namespace).Get(policyRef.Name, metav1.GetOptions{})
+			if err != nil {
+				return nil, fmt.Errorf("couldn't get policy config map %s/%s: %v", policyRef.Namespace, policyRef.Name, err)
+			}
+			data, found := policyConfigMap.Data[kubeschedulerconfig.SchedulerPolicyConfigMapKey]
+			if !found {
+				return nil, fmt.Errorf("missing policy config map value at key %q", kubeschedulerconfig.SchedulerPolicyConfigMapKey)
+			}
+			err = runtime.DecodeInto(latestschedulerapi.Codec, []byte(data), policy)
+			if err != nil {
+				return nil, fmt.Errorf("invalid policy: %v", err)
+			}
+		}
+		sc, err := configurator.CreateFromConfig(*policy)
+		if err != nil {
+			return nil, fmt.Errorf("couldn't create scheduler from policy: %v", err)
+		}
+		config = sc
+	default:
+		return nil, fmt.Errorf("unsupported algorithm source: %v", source)
+	}
+	// Additional tweaks to the config produced by the configurator.
+	config.Recorder = recorder
+	config.DisablePreemption = options.disablePreemption
+	// Create the scheduler.
+	sched := NewFromConfig(config)
+	return sched, nil
 }
 
 // Run begins watching and scheduling. It waits for cache to be synced, then starts a goroutine and returns immediately.
