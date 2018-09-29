@@ -265,6 +265,7 @@ func New(client clientset.Interface,
 	//	BindTimeoutSeconds:             options.bindTimeoutSeconds,
 	//})
 
+	// start ----------------------------------------------------------------------------
 	// start // move factory NewConfigFactory to here
 	stopEverything := make(chan struct{})
 	schedulerCache := schedulercache.New(30*time.Second, stopEverything)
@@ -314,6 +315,7 @@ func New(client clientset.Interface,
 		}
 	}()
 	// end // move factory NewConfigFactory to here
+	// end ----------------------------------------------------------------------------
 
 	var config *Config
 	source := options.schedulerAlgorithmSource
@@ -368,6 +370,99 @@ func New(client clientset.Interface,
 	default:
 		return nil, fmt.Errorf("unsupported algorithm source: %v", source)
 	}
+
+	// start ----------------------------------------------------------------------------
+	// Create creates a scheduler with the default algorithm provider.
+	func (c *configFactory) Create() (*scheduler.Config, error) {
+		return c.CreateFromProvider(DefaultProvider)
+	}
+
+	// Creates a scheduler from the name of a registered algorithm provider.
+	func (c *configFactory) CreateFromProvider(providerName string) (*scheduler.Config, error) {
+		glog.V(2).Infof("Creating scheduler from algorithm provider '%v'", providerName)
+		provider, err := GetAlgorithmProvider(providerName)
+			if err != nil {
+			return nil, err
+		}
+		return c.CreateFromKeys(provider.FitPredicateKeys, provider.PriorityFunctionKeys, []algorithm.SchedulerExtender{})
+	}
+	// end ----------------------------------------------------------------------------
+
+
+	// start ----------------------------------------------------------------------------
+	// start // move factory CreateFromKeys here
+	glog.V(2).Infof("Creating scheduler with fit predicates '%v' and priority functions '%v'", predicateKeys, priorityKeys)
+
+	if c.GetHardPodAffinitySymmetricWeight() < 1 || c.GetHardPodAffinitySymmetricWeight() > 100 {
+		return nil, fmt.Errorf("invalid hardPodAffinitySymmetricWeight: %d, must be in the range 1-100", c.GetHardPodAffinitySymmetricWeight())
+	}
+
+	predicateFuncs, err := c.GetPredicates(predicateKeys)
+	if err != nil {
+		return nil, err
+	}
+
+	priorityConfigs, err := c.GetPriorityFunctionConfigs(priorityKeys)
+	if err != nil {
+		return nil, err
+	}
+
+	priorityMetaProducer, err := c.GetPriorityMetadataProducer()
+	if err != nil {
+		return nil, err
+	}
+
+	predicateMetaProducer, err := c.GetPredicateMetadataProducer()
+	if err != nil {
+		return nil, err
+	}
+
+	// Init equivalence class cache
+	if c.enableEquivalenceClassCache {
+		c.equivalencePodCache = equivalence.NewCache()
+		glog.Info("Created equivalence class cache")
+	}
+
+	algo := core.NewGenericScheduler(
+		c.schedulerCache,
+		c.equivalencePodCache,
+		c.podQueue,
+		predicateFuncs,
+		predicateMetaProducer,
+		priorityConfigs,
+		priorityMetaProducer,
+		extenders,
+		c.volumeBinder,
+		c.pVCLister,
+		c.alwaysCheckAllPredicates,
+		c.disablePreemption,
+		c.percentageOfNodesToScore,
+	)
+
+	podBackoff := util.CreateDefaultPodBackoff()
+	return &scheduler.Config{
+		SchedulerCache: c.schedulerCache,
+		Ecache:         c.equivalencePodCache,
+		// The scheduler only needs to consider schedulable nodes.
+		NodeLister:          &nodeLister{c.nodeLister},
+		Algorithm:           algo,
+		GetBinder:           c.getBinderFunc(extenders),
+		PodConditionUpdater: &podConditionUpdater{c.client},
+		PodPreemptor:        &podPreemptor{c.client},
+		WaitForCacheSync: func() bool {
+			return cache.WaitForCacheSync(c.StopEverything, c.scheduledPodsHasSynced)
+		},
+		NextPod: func() *v1.Pod {
+			return c.getNextPod()
+		},
+		Error:          c.MakeDefaultErrorFunc(podBackoff, c.podQueue),
+		StopEverything: c.StopEverything,
+		VolumeBinder:   c.volumeBinder,
+	}, nil
+
+	// end // move factory CreateFromKeys here
+	// start ----------------------------------------------------------------------------
+
 	// Additional tweaks to the config produced by the configurator.
 	config.Recorder = recorder
 	config.DisablePreemption = options.disablePreemption
