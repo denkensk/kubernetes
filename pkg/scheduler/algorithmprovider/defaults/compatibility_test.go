@@ -987,7 +987,6 @@ func TestCompatibility_v1_Scheduler(t *testing.T) {
 			PdbInformer:                    informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
 			StorageClassInformer:           informerFactory.Storage().V1().StorageClasses(),
 			HardPodAffinitySymmetricWeight: v1.DefaultHardPodAffinitySymmetricWeight,
-			EnableEquivalenceClassCache:    enableEquivalenceCache,
 			DisablePreemption:              false,
 			PercentageOfNodesToScore:       schedulerapi.DefaultPercentageOfNodesToScore,
 		}).CreateFromConfig(policy); err != nil {

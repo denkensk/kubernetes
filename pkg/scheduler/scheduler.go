@@ -29,11 +29,9 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
-	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 	"k8s.io/kubernetes/pkg/scheduler/core"
-	"k8s.io/kubernetes/pkg/scheduler/core/equivalence"
 	internalqueue "k8s.io/kubernetes/pkg/scheduler/internal/queue"
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 	"k8s.io/kubernetes/pkg/scheduler/util"
@@ -111,12 +109,9 @@ type Config struct {
 	// It is expected that changes made via SchedulerCache will be observed
 	// by NodeLister and Algorithm.
 	SchedulerCache schedulercache.Cache
-	// Ecache is used for optimistically invalid affected cache items after
-	// successfully binding a pod
-	Ecache     *equivalence.Cache
-	NodeLister algorithm.NodeLister
-	Algorithm  algorithm.ScheduleAlgorithm
-	GetBinder  func(pod *v1.Pod) Binder
+	NodeLister     algorithm.NodeLister
+	Algorithm      algorithm.ScheduleAlgorithm
+	GetBinder      func(pod *v1.Pod) Binder
 	// PodConditionUpdater is used only in case of scheduling errors. If we succeed
 	// with scheduling, PodScheduled condition will be updated in apiserver in /bind
 	// handler so that binding and setting PodCondition it is atomic.
@@ -277,12 +272,6 @@ func (sched *Scheduler) assumeVolumes(assumed *v1.Pod, host string) (allBound bo
 				Message: err.Error(),
 			})
 		}
-		// Invalidate ecache because assumed volumes could have affected the cached
-		// pvs for other pods
-		if sched.config.Ecache != nil {
-			invalidPredicates := sets.NewString(predicates.CheckVolumeBindingPred)
-			sched.config.Ecache.InvalidatePredicates(invalidPredicates)
-		}
 	}
 	return
 }
@@ -354,12 +343,6 @@ func (sched *Scheduler) assume(assumed *v1.Pod, host string) error {
 		return err
 	}
 
-	// Optimistically assume that the binding will succeed, so we need to invalidate affected
-	// predicates in equivalence cache.
-	// If the binding fails, these invalidated item will not break anything.
-	if sched.config.Ecache != nil {
-		sched.config.Ecache.InvalidateCachedPredicateItemForPodAdd(assumed, host)
-	}
 	return nil
 }
 
