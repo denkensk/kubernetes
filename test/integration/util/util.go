@@ -95,6 +95,8 @@ func createSchedulerConfigurator(
 	clientSet clientset.Interface,
 	informerFactory informers.SharedInformerFactory,
 ) scheduler.Configurator {
+	// Enable EnableEquivalenceClassCache for all integration tests.
+	utilfeature.DefaultFeatureGate.Set("EnableEquivalenceClassCache=true")
 
 	return factory.NewConfigFactory(&factory.ConfigFactoryArgs{
 		SchedulerName:                  v1.DefaultSchedulerName,
@@ -110,6 +112,7 @@ func createSchedulerConfigurator(
 		PdbInformer:                    informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
 		StorageClassInformer:           informerFactory.Storage().V1().StorageClasses(),
 		HardPodAffinitySymmetricWeight: v1.DefaultHardPodAffinitySymmetricWeight,
+		EnableEquivalenceClassCache:    utilfeature.DefaultFeatureGate.Enabled(features.EnableEquivalenceClassCache),
 		DisablePreemption:              false,
 		PercentageOfNodesToScore:       schedulerapi.DefaultPercentageOfNodesToScore,
 	})

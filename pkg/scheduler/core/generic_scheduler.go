@@ -40,6 +40,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
+	"k8s.io/kubernetes/pkg/scheduler/core/equivalence"
 	internalqueue "k8s.io/kubernetes/pkg/scheduler/internal/queue"
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 	"k8s.io/kubernetes/pkg/scheduler/util"
@@ -94,21 +95,23 @@ func (f *FitError) Error() string {
 }
 
 type genericScheduler struct {
-	cache                    schedulercache.Cache
-	schedulingQueue          internalqueue.SchedulingQueue
-	predicates               map[string]algorithm.FitPredicate
-	priorityMetaProducer     algorithm.PriorityMetadataProducer
-	predicateMetaProducer    algorithm.PredicateMetadataProducer
-	prioritizers             []algorithm.PriorityConfig
-	extenders                []algorithm.SchedulerExtender
-	lastNodeIndex            uint64
-	alwaysCheckAllPredicates bool
-	cachedNodeInfoMap        map[string]*schedulercache.NodeInfo
-	volumeBinder             *volumebinder.VolumeBinder
-	pvcLister                corelisters.PersistentVolumeClaimLister
-	pdbLister                algorithm.PDBLister
-	disablePreemption        bool
-	percentageOfNodesToScore int32
+	cache                       schedulercache.Cache
+	equivalenceCache            *equivalence.EquivalenceCache
+	schedulingQueue             internalqueue.SchedulingQueue
+	predicates                  map[string]algorithm.FitPredicate
+	priorityMetaProducer        algorithm.PriorityMetadataProducer
+	predicateMetaProducer       algorithm.PredicateMetadataProducer
+	prioritizers                []algorithm.PriorityConfig
+	extenders                   []algorithm.SchedulerExtender
+	lastNodeIndex               uint64
+	alwaysCheckAllPredicates    bool
+	cachedNodeInfoMap           map[string]*schedulercache.NodeInfo
+	volumeBinder                *volumebinder.VolumeBinder
+	pvcLister                   corelisters.PersistentVolumeClaimLister
+	pdbLister                   algorithm.PDBLister
+	disablePreemption           bool
+	enableEquivalenceClassCache bool
+	percentageOfNodesToScore    int32
 }
 
 // snapshot snapshots equivalane cache and node infos for all fit and priority
@@ -124,9 +127,26 @@ func (g *genericScheduler) snapshot() error {
 func (g *genericScheduler) Schedule(pod *v1.Pod, nodeLister algorithm.NodeLister) (string, error) {
 	trace := utiltrace.New(fmt.Sprintf("Scheduling %s/%s", pod.Namespace, pod.Name))
 	defer trace.LogIfLong(100 * time.Millisecond)
+	var (
+		podReschedule bool
+		hash          uint64
+	)
 
 	if err := podPassesBasicChecks(pod, g.pvcLister); err != nil {
 		return "", err
+	}
+
+	if g.enableEquivalenceClassCache {
+		podReschedule = false
+		hash := g.equivalenceCache.GetEquivHash(pod)
+
+		if uuid, ok := g.equivalenceCache.Cache[hash]; ok {
+			if uuid != pod.GetUID() {
+				return "", fmt.Errorf("reject by Equivalence Class")
+			} else {
+				podReschedule = true
+			}
+		}
 	}
 
 	nodes, err := nodeLister.List()
@@ -150,6 +170,10 @@ func (g *genericScheduler) Schedule(pod *v1.Pod, nodeLister algorithm.NodeLister
 	}
 
 	if len(filteredNodes) == 0 {
+		// Pod has failed to schedule,  its hash and UUID will be cached,
+		if g.enableEquivalenceClassCache {
+			g.equivalenceCache.Cache[hash] = pod.GetUID()
+		}
 		return "", &FitError{
 			Pod:              pod,
 			NumAllNodes:      len(nodes),
@@ -176,7 +200,18 @@ func (g *genericScheduler) Schedule(pod *v1.Pod, nodeLister algorithm.NodeLister
 	metrics.SchedulingLatency.WithLabelValues(metrics.PriorityEvaluation).Observe(metrics.SinceInSeconds(startPriorityEvalTime))
 
 	trace.Step("Selecting host")
-	return g.selectHost(priorityList)
+
+	selectHost, err := g.selectHost(priorityList)
+	if err != nil {
+		return "", err
+	}
+
+	// Pod is scheduled successfully, its cache will be Invalidated,
+	if g.enableEquivalenceClassCache && podReschedule {
+		g.equivalenceCache.Invalidate(hash)
+	}
+
+	return selectHost, err
 }
 
 // Prioritizers returns a slice containing all the scheduler's priority
@@ -1104,6 +1139,7 @@ func podPassesBasicChecks(pod *v1.Pod, pvcLister corelisters.PersistentVolumeCla
 // NewGenericScheduler creates a genericScheduler object.
 func NewGenericScheduler(
 	cache schedulercache.Cache,
+	eCache *equivalence.EquivalenceCache,
 	podQueue internalqueue.SchedulingQueue,
 	predicates map[string]algorithm.FitPredicate,
 	predicateMetaProducer algorithm.PredicateMetadataProducer,
@@ -1115,22 +1151,25 @@ func NewGenericScheduler(
 	pdbLister algorithm.PDBLister,
 	alwaysCheckAllPredicates bool,
 	disablePreemption bool,
+	enableEquivalenceClassCache bool,
 	percentageOfNodesToScore int32,
 ) algorithm.ScheduleAlgorithm {
 	return &genericScheduler{
-		cache:                    cache,
-		schedulingQueue:          podQueue,
-		predicates:               predicates,
-		predicateMetaProducer:    predicateMetaProducer,
-		prioritizers:             prioritizers,
-		priorityMetaProducer:     priorityMetaProducer,
-		extenders:                extenders,
-		cachedNodeInfoMap:        make(map[string]*schedulercache.NodeInfo),
-		volumeBinder:             volumeBinder,
-		pvcLister:                pvcLister,
-		pdbLister:                pdbLister,
-		alwaysCheckAllPredicates: alwaysCheckAllPredicates,
-		disablePreemption:        disablePreemption,
-		percentageOfNodesToScore: percentageOfNodesToScore,
+		cache:                       cache,
+		equivalenceCache:            eCache,
+		schedulingQueue:             podQueue,
+		predicates:                  predicates,
+		predicateMetaProducer:       predicateMetaProducer,
+		prioritizers:                prioritizers,
+		priorityMetaProducer:        priorityMetaProducer,
+		extenders:                   extenders,
+		cachedNodeInfoMap:           make(map[string]*schedulercache.NodeInfo),
+		volumeBinder:                volumeBinder,
+		pvcLister:                   pvcLister,
+		pdbLister:                   pdbLister,
+		alwaysCheckAllPredicates:    alwaysCheckAllPredicates,
+		disablePreemption:           disablePreemption,
+		enableEquivalenceClassCache: enableEquivalenceClassCache,
+		percentageOfNodesToScore:    percentageOfNodesToScore,
 	}
 }

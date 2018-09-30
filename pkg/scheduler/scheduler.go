@@ -38,6 +38,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
 
 	"github.com/golang/glog"
+	"k8s.io/kubernetes/pkg/scheduler/core/equivalence"
 )
 
 // Binder knows how to write a binding.
@@ -109,9 +110,12 @@ type Config struct {
 	// It is expected that changes made via SchedulerCache will be observed
 	// by NodeLister and Algorithm.
 	SchedulerCache schedulercache.Cache
-	NodeLister     algorithm.NodeLister
-	Algorithm      algorithm.ScheduleAlgorithm
-	GetBinder      func(pod *v1.Pod) Binder
+	// Ecache is used for optimistically invalid affected cache items after
+	// fail binding a pod
+	Ecache     *equivalence.EquivalenceCache
+	NodeLister algorithm.NodeLister
+	Algorithm  algorithm.ScheduleAlgorithm
+	GetBinder  func(pod *v1.Pod) Binder
 	// PodConditionUpdater is used only in case of scheduling errors. If we succeed
 	// with scheduling, PodScheduled condition will be updated in apiserver in /bind
 	// handler so that binding and setting PodCondition it is atomic.
