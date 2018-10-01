@@ -41,16 +41,16 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
-	storagelisters "k8s.io/client-go/listers/storage/v1"
+
+	"fmt"
+	"io/ioutil"
+	"os"
 
 	"github.com/golang/glog"
-	"fmt"
-	"os"
-	"io/ioutil"
-	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	"k8s.io/apimachinery/pkg/runtime"
 	latestschedulerapi "k8s.io/kubernetes/pkg/scheduler/api/latest"
-	"os/signal"
+	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
+	"k8s.io/kubernetes/pkg/scheduler/factory"
 )
 
 // Binder knows how to write a binding.
@@ -244,81 +244,32 @@ func New(client clientset.Interface,
 		opt(&options)
 	}
 
+	args := &factory.ConfigFactoryArgs{
+		SchedulerName:                  options.schedulerName,
+		Client:                         client,
+		NodeInformer:                   nodeInformer,
+		PodInformer:                    podInformer,
+		PvInformer:                     pvInformer,
+		PvcInformer:                    pvcInformer,
+		ReplicationControllerInformer:  replicationControllerInformer,
+		ReplicaSetInformer:             replicaSetInformer,
+		StatefulSetInformer:            statefulSetInformer,
+		ServiceInformer:                serviceInformer,
+		PdbInformer:                    pdbInformer,
+		StorageClassInformer:           storageClassInformer,
+		HardPodAffinitySymmetricWeight: options.hardPodAffinitySymmetricWeight,
+		EnableEquivalenceClassCache:    utilfeature.DefaultFeatureGate.Enabled(features.EnableEquivalenceClassCache),
+		DisablePreemption:              options.disablePreemption,
+		PercentageOfNodesToScore:       options.percentageOfNodesToScore,
+		BindTimeoutSeconds:             options.bindTimeoutSeconds,
+	}
+
 	// Set up the configurator which can create schedulers from configs.
-	//configurator := factory.NewConfigFactory(&factory.ConfigFactoryArgs{
-	//	SchedulerName:                  options.schedulerName,
-	//	Client:                         client,
-	//	NodeInformer:                   nodeInformer,
-	//	PodInformer:                    podInformer,
-	//	PvInformer:                     pvInformer,
-	//	PvcInformer:                    pvcInformer,
-	//	ReplicationControllerInformer:  replicationControllerInformer,
-	//	ReplicaSetInformer:             replicaSetInformer,
-	//	StatefulSetInformer:            statefulSetInformer,
-	//	ServiceInformer:                serviceInformer,
-	//	PdbInformer:                    pdbInformer,
-	//	StorageClassInformer:           storageClassInformer,
-	//	HardPodAffinitySymmetricWeight: options.hardPodAffinitySymmetricWeight,
-	//	EnableEquivalenceClassCache:    options.enableEquivalenceClassCache,
-	//	DisablePreemption:              options.disablePreemption,
-	//	PercentageOfNodesToScore:       options.percentageOfNodesToScore,
-	//	BindTimeoutSeconds:             options.bindTimeoutSeconds,
-	//})
+	configurator := factory.NewConfigFactory(args)
 
-	// start ----------------------------------------------------------------------------
-	// start // move factory NewConfigFactory to here
-	stopEverything := make(chan struct{})
-	schedulerCache := schedulercache.New(30*time.Second, stopEverything)
-
-	// storageClassInformer is only enabled through VolumeScheduling feature gate
-	var storageClassLister storagelisters.StorageClassLister
-	if args.StorageClassInformer != nil {
-		storageClassLister = args.StorageClassInformer.Lister()
-	}
-	c := &configFactory{
-		client:                         args.Client,
-		podLister:                      schedulerCache,
-		podQueue:                       core.NewSchedulingQueue(),
-		storageClassLister:             storageClassLister,
-		schedulerCache:                 schedulerCache,
-		StopEverything:                 stopEverything,
-		schedulerName:                  args.SchedulerName,
-		hardPodAffinitySymmetricWeight: args.HardPodAffinitySymmetricWeight,
-		enableEquivalenceClassCache:    args.EnableEquivalenceClassCache,
-		disablePreemption:              args.DisablePreemption,
-		percentageOfNodesToScore:       args.PercentageOfNodesToScore,
-	}
-
-	scheduler := &Scheduler{
-		SchedulerCache: schedulerCache,
-		Ecache     *equivalence.Cache
-		NodeLister algorithm.NodeLister
-		Algorithm  algorithm.ScheduleAlgorithm
-		GetBinder  func(pod *v1.Pod) Binder
-		PodConditionUpdater PodConditionUpdater
-		PodPreemptor PodPreemptor
-		NextPod func() *v1.Pod
-		WaitForCacheSync func() bool
-		Error func(*v1.Pod, error)
-		Recorder record.EventRecorder
-		StopEverything: stopEverything,
-		VolumeBinder *volumebinder.VolumeBinder
-		DisablePreemption: options.disablePreemption,
-	}
-
-	go func() {
-		for {
-			select {
-			case <-s.StopEverything:
-				return
-			}
-		}
-	}()
-	// end // move factory NewConfigFactory to here
-	// end ----------------------------------------------------------------------------
-
-	var config *Config
 	source := options.schedulerAlgorithmSource
+	var config *Scheduler
+
 	switch {
 	case source.Provider != nil:
 		// Create the config from a named algorithm provider.
@@ -370,105 +321,239 @@ func New(client clientset.Interface,
 	default:
 		return nil, fmt.Errorf("unsupported algorithm source: %v", source)
 	}
+	// Additional tweaks to the config produced by the configurator.
+	config.Recorder = s.Recorder
 
-	// start ----------------------------------------------------------------------------
-	// Create creates a scheduler with the default algorithm provider.
-	func (c *configFactory) Create() (*scheduler.Config, error) {
-		return c.CreateFromProvider(DefaultProvider)
-	}
+	config.DisablePreemption = s.ComponentConfig.DisablePreemption
+	return config, nil
 
-	// Creates a scheduler from the name of a registered algorithm provider.
-	func (c *configFactory) CreateFromProvider(providerName string) (*scheduler.Config, error) {
-		glog.V(2).Infof("Creating scheduler from algorithm provider '%v'", providerName)
-		provider, err := GetAlgorithmProvider(providerName)
+	/*
+		// Set up the configurator which can create schedulers from configs.
+		//configurator := factory.NewConfigFactory(&factory.ConfigFactoryArgs{
+		//	SchedulerName:                  options.schedulerName,
+		//	Client:                         client,
+		//	NodeInformer:                   nodeInformer,
+		//	PodInformer:                    podInformer,
+		//	PvInformer:                     pvInformer,
+		//	PvcInformer:                    pvcInformer,
+		//	ReplicationControllerInformer:  replicationControllerInformer,
+		//	ReplicaSetInformer:             replicaSetInformer,
+		//	StatefulSetInformer:            statefulSetInformer,
+		//	ServiceInformer:                serviceInformer,
+		//	PdbInformer:                    pdbInformer,
+		//	StorageClassInformer:           storageClassInformer,
+		//	HardPodAffinitySymmetricWeight: options.hardPodAffinitySymmetricWeight,
+		//	EnableEquivalenceClassCache:    options.enableEquivalenceClassCache,
+		//	DisablePreemption:              options.disablePreemption,
+		//	PercentageOfNodesToScore:       options.percentageOfNodesToScore,
+		//	BindTimeoutSeconds:             options.bindTimeoutSeconds,
+		//})
+
+		// start ----------------------------------------------------------------------------
+		// start // move factory NewConfigFactory to here
+		stopEverything := make(chan struct{})
+		schedulerCache := schedulercache.New(30*time.Second, stopEverything)
+
+		// storageClassInformer is only enabled through VolumeScheduling feature gate
+		var storageClassLister storagelisters.StorageClassLister
+		if storageClassInformer != nil {
+			storageClassLister = StorageClassInformer.Lister()
+		}
+		//c := &configFactory{
+		//	client:                         args.Client,
+		//	podLister:                      schedulerCache,
+		//	podQueue:                       core.NewSchedulingQueue(),
+		//	storageClassLister:             storageClassLister,
+		//	schedulerCache:                 schedulerCache,
+		//	StopEverything:                 stopEverything,
+		//	schedulerName:                  args.SchedulerName,
+		//	hardPodAffinitySymmetricWeight: args.HardPodAffinitySymmetricWeight,
+		//	enableEquivalenceClassCache:    args.EnableEquivalenceClassCache,
+		//	disablePreemption:              args.DisablePreemption,
+		//	percentageOfNodesToScore:       args.PercentageOfNodesToScore,
+		//}
+
+		scheduler := &Scheduler{
+			SchedulerCache: schedulerCache,
+			Ecache     *equivalence.Cache
+			NodeLister algorithm.NodeLister
+			Algorithm  algorithm.ScheduleAlgorithm
+			GetBinder  func(pod *v1.Pod) Binder
+			PodConditionUpdater PodConditionUpdater
+			PodPreemptor PodPreemptor
+			NextPod func() *v1.Pod
+			WaitForCacheSync func() bool
+			Error func(*v1.Pod, error)
+			Recorder record.EventRecorder
+			StopEverything: stopEverything,
+			VolumeBinder *volumebinder.VolumeBinder
+			DisablePreemption: options.disablePreemption,
+		}
+
+		go func() {
+			for {
+				select {
+				case <-scheduler.StopEverything:
+					return
+				}
+			}
+		}()
+		// end // move factory NewConfigFactory to here
+		// end ----------------------------------------------------------------------------
+
+		var config *Config
+		source := options.schedulerAlgorithmSource
+		switch {
+		case source.Provider != nil:
+			// Create the config from a named algorithm provider.
+			sc, err := configurator.CreateFromProvider(*source.Provider)
 			if err != nil {
+				return nil, fmt.Errorf("couldn't create scheduler using provider %q: %v", *source.Provider, err)
+			}
+			config = sc
+		case source.Policy != nil:
+			// Create the config from a user specified policy source.
+			policy := &schedulerapi.Policy{}
+			switch {
+			case source.Policy.File != nil:
+				// Use a policy serialized in a file.
+				policyFile := source.Policy.File.Path
+				_, err := os.Stat(policyFile)
+				if err != nil {
+					return nil, fmt.Errorf("missing policy config file %s", policyFile)
+				}
+				data, err := ioutil.ReadFile(policyFile)
+				if err != nil {
+					return nil, fmt.Errorf("couldn't read policy config: %v", err)
+				}
+				err = runtime.DecodeInto(latestschedulerapi.Codec, []byte(data), policy)
+				if err != nil {
+					return nil, fmt.Errorf("invalid policy: %v", err)
+				}
+			case source.Policy.ConfigMap != nil:
+				// Use a policy serialized in a config map value.
+				policyRef := source.Policy.ConfigMap
+				policyConfigMap, err := client.CoreV1().ConfigMaps(policyRef.Namespace).Get(policyRef.Name, metav1.GetOptions{})
+				if err != nil {
+					return nil, fmt.Errorf("couldn't get policy config map %s/%s: %v", policyRef.Namespace, policyRef.Name, err)
+				}
+				data, found := policyConfigMap.Data[kubeschedulerconfig.SchedulerPolicyConfigMapKey]
+				if !found {
+					return nil, fmt.Errorf("missing policy config map value at key %q", kubeschedulerconfig.SchedulerPolicyConfigMapKey)
+				}
+				err = runtime.DecodeInto(latestschedulerapi.Codec, []byte(data), policy)
+				if err != nil {
+					return nil, fmt.Errorf("invalid policy: %v", err)
+				}
+			}
+			sc, err := configurator.CreateFromConfig(*policy)
+			if err != nil {
+				return nil, fmt.Errorf("couldn't create scheduler from policy: %v", err)
+			}
+			config = sc
+		default:
+			return nil, fmt.Errorf("unsupported algorithm source: %v", source)
+		}
+
+		// start ----------------------------------------------------------------------------
+		// Create creates a scheduler with the default algorithm provider.
+		func (c *configFactory) Create() (*scheduler.Config, error) {
+			return c.CreateFromProvider(DefaultProvider)
+		}
+
+		// Creates a scheduler from the name of a registered algorithm provider.
+		func (c *configFactory) CreateFromProvider(providerName string) (*scheduler.Config, error) {
+			glog.V(2).Infof("Creating scheduler from algorithm provider '%v'", providerName)
+			provider, err := GetAlgorithmProvider(providerName)
+				if err != nil {
+				return nil, err
+			}
+			return c.CreateFromKeys(provider.FitPredicateKeys, provider.PriorityFunctionKeys, []algorithm.SchedulerExtender{})
+		}
+		// end ----------------------------------------------------------------------------
+
+
+		// start ----------------------------------------------------------------------------
+		// start // move factory CreateFromKeys here
+		glog.V(2).Infof("Creating scheduler with fit predicates '%v' and priority functions '%v'", predicateKeys, priorityKeys)
+
+		if c.GetHardPodAffinitySymmetricWeight() < 1 || c.GetHardPodAffinitySymmetricWeight() > 100 {
+			return nil, fmt.Errorf("invalid hardPodAffinitySymmetricWeight: %d, must be in the range 1-100", c.GetHardPodAffinitySymmetricWeight())
+		}
+
+		predicateFuncs, err := c.GetPredicates(predicateKeys)
+		if err != nil {
 			return nil, err
 		}
-		return c.CreateFromKeys(provider.FitPredicateKeys, provider.PriorityFunctionKeys, []algorithm.SchedulerExtender{})
-	}
-	// end ----------------------------------------------------------------------------
 
+		priorityConfigs, err := c.GetPriorityFunctionConfigs(priorityKeys)
+		if err != nil {
+			return nil, err
+		}
 
-	// start ----------------------------------------------------------------------------
-	// start // move factory CreateFromKeys here
-	glog.V(2).Infof("Creating scheduler with fit predicates '%v' and priority functions '%v'", predicateKeys, priorityKeys)
+		priorityMetaProducer, err := c.GetPriorityMetadataProducer()
+		if err != nil {
+			return nil, err
+		}
 
-	if c.GetHardPodAffinitySymmetricWeight() < 1 || c.GetHardPodAffinitySymmetricWeight() > 100 {
-		return nil, fmt.Errorf("invalid hardPodAffinitySymmetricWeight: %d, must be in the range 1-100", c.GetHardPodAffinitySymmetricWeight())
-	}
+		predicateMetaProducer, err := c.GetPredicateMetadataProducer()
+		if err != nil {
+			return nil, err
+		}
 
-	predicateFuncs, err := c.GetPredicates(predicateKeys)
-	if err != nil {
-		return nil, err
-	}
+		// Init equivalence class cache
+		if c.enableEquivalenceClassCache {
+			c.equivalencePodCache = equivalence.NewCache()
+			glog.Info("Created equivalence class cache")
+		}
 
-	priorityConfigs, err := c.GetPriorityFunctionConfigs(priorityKeys)
-	if err != nil {
-		return nil, err
-	}
+		algo := core.NewGenericScheduler(
+			c.schedulerCache,
+			c.equivalencePodCache,
+			c.podQueue,
+			predicateFuncs,
+			predicateMetaProducer,
+			priorityConfigs,
+			priorityMetaProducer,
+			extenders,
+			c.volumeBinder,
+			c.pVCLister,
+			c.alwaysCheckAllPredicates,
+			c.disablePreemption,
+			c.percentageOfNodesToScore,
+		)
 
-	priorityMetaProducer, err := c.GetPriorityMetadataProducer()
-	if err != nil {
-		return nil, err
-	}
+		podBackoff := util.CreateDefaultPodBackoff()
+		return &scheduler.Config{
+			SchedulerCache: c.schedulerCache,
+			Ecache:         c.equivalencePodCache,
+			// The scheduler only needs to consider schedulable nodes.
+			NodeLister:          &nodeLister{c.nodeLister},
+			Algorithm:           algo,
+			GetBinder:           c.getBinderFunc(extenders),
+			PodConditionUpdater: &podConditionUpdater{c.client},
+			PodPreemptor:        &podPreemptor{c.client},
+			WaitForCacheSync: func() bool {
+				return cache.WaitForCacheSync(c.StopEverything, c.scheduledPodsHasSynced)
+			},
+			NextPod: func() *v1.Pod {
+				return c.getNextPod()
+			},
+			Error:          c.MakeDefaultErrorFunc(podBackoff, c.podQueue),
+			StopEverything: c.StopEverything,
+			VolumeBinder:   c.volumeBinder,
+		}, nil
 
-	predicateMetaProducer, err := c.GetPredicateMetadataProducer()
-	if err != nil {
-		return nil, err
-	}
+		// end // move factory CreateFromKeys here
+		// start ----------------------------------------------------------------------------
 
-	// Init equivalence class cache
-	if c.enableEquivalenceClassCache {
-		c.equivalencePodCache = equivalence.NewCache()
-		glog.Info("Created equivalence class cache")
-	}
-
-	algo := core.NewGenericScheduler(
-		c.schedulerCache,
-		c.equivalencePodCache,
-		c.podQueue,
-		predicateFuncs,
-		predicateMetaProducer,
-		priorityConfigs,
-		priorityMetaProducer,
-		extenders,
-		c.volumeBinder,
-		c.pVCLister,
-		c.alwaysCheckAllPredicates,
-		c.disablePreemption,
-		c.percentageOfNodesToScore,
-	)
-
-	podBackoff := util.CreateDefaultPodBackoff()
-	return &scheduler.Config{
-		SchedulerCache: c.schedulerCache,
-		Ecache:         c.equivalencePodCache,
-		// The scheduler only needs to consider schedulable nodes.
-		NodeLister:          &nodeLister{c.nodeLister},
-		Algorithm:           algo,
-		GetBinder:           c.getBinderFunc(extenders),
-		PodConditionUpdater: &podConditionUpdater{c.client},
-		PodPreemptor:        &podPreemptor{c.client},
-		WaitForCacheSync: func() bool {
-			return cache.WaitForCacheSync(c.StopEverything, c.scheduledPodsHasSynced)
-		},
-		NextPod: func() *v1.Pod {
-			return c.getNextPod()
-		},
-		Error:          c.MakeDefaultErrorFunc(podBackoff, c.podQueue),
-		StopEverything: c.StopEverything,
-		VolumeBinder:   c.volumeBinder,
-	}, nil
-
-	// end // move factory CreateFromKeys here
-	// start ----------------------------------------------------------------------------
-
-	// Additional tweaks to the config produced by the configurator.
-	config.Recorder = recorder
-	config.DisablePreemption = options.disablePreemption
-	// Create the scheduler.
-	sched := NewFromConfig(config)
-	return sched, nil
+		// Additional tweaks to the config produced by the configurator.
+		config.Recorder = recorder
+		config.DisablePreemption = options.disablePreemption
+		// Create the scheduler.
+		sched := NewFromConfig(config)
+		return sched, nil
+	*/
 }
 
 // Run begins watching and scheduling. It waits for cache to be synced, then starts a goroutine and returns immediately.
