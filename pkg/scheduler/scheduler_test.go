@@ -39,6 +39,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	"k8s.io/kubernetes/pkg/scheduler/api"
 	"k8s.io/kubernetes/pkg/scheduler/core"
+	"k8s.io/kubernetes/pkg/scheduler/factory"
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
 	schedulertesting "k8s.io/kubernetes/pkg/scheduler/testing"
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
@@ -199,7 +200,7 @@ func TestScheduler(t *testing.T) {
 			var gotAssumedPod *v1.Pod
 			var gotBinding *v1.Binding
 			configurator := &FakeConfigurator{
-				Config: &Config{
+				Config: &factory.Config{
 					SchedulerCache: &schedulertesting.FakeCache{
 						ForgetFunc: func(pod *v1.Pod) {
 							gotForgetPod = pod
@@ -212,7 +213,7 @@ func TestScheduler(t *testing.T) {
 						[]*v1.Node{&testNode},
 					),
 					Algorithm: item.algo,
-					GetBinder: func(pod *v1.Pod) Binder {
+					GetBinder: func(pod *v1.Pod) factory.Binder {
 						return fakeBinder{func(b *v1.Binding) error {
 							gotBinding = b
 							return item.injectBindError
@@ -568,11 +569,11 @@ func setupTestScheduler(queuedPodStore *clientcache.FIFO, scache schedulerintern
 	bindingChan := make(chan *v1.Binding, 1)
 	errChan := make(chan error, 1)
 	configurator := &FakeConfigurator{
-		Config: &Config{
+		Config: &factory.Config{
 			SchedulerCache: scache,
 			NodeLister:     nodeLister,
 			Algorithm:      algo,
-			GetBinder: func(pod *v1.Pod) Binder {
+			GetBinder: func(pod *v1.Pod) factory.Binder {
 				return fakeBinder{func(b *v1.Binding) error {
 					bindingChan <- b
 					return nil
@@ -618,11 +619,11 @@ func setupTestSchedulerLongBindingWithRetry(queuedPodStore *clientcache.FIFO, sc
 		api.DefaultPercentageOfNodesToScore)
 	bindingChan := make(chan *v1.Binding, 2)
 	configurator := &FakeConfigurator{
-		Config: &Config{
+		Config: &factory.Config{
 			SchedulerCache: scache,
 			NodeLister:     nodeLister,
 			Algorithm:      algo,
-			GetBinder: func(pod *v1.Pod) Binder {
+			GetBinder: func(pod *v1.Pod) factory.Binder {
 				return fakeBinder{func(b *v1.Binding) error {
 					time.Sleep(bindingTime)
 					bindingChan <- b
