@@ -27,10 +27,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	clientset "k8s.io/client-go/kubernetes"
+	restclient "k8s.io/client-go/rest"
 	clientcache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
@@ -38,10 +41,14 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	"k8s.io/kubernetes/pkg/scheduler/api"
+	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	"k8s.io/kubernetes/pkg/scheduler/core"
+	"k8s.io/kubernetes/pkg/scheduler/factory"
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
 	schedulertesting "k8s.io/kubernetes/pkg/scheduler/testing"
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
+	"k8s.io/kubernetes/staging/src/k8s.io/client-go/informers"
+	"k8s.io/kubernetes/test/integration/framework"
 )
 
 type fakeBinder struct {
@@ -199,7 +206,7 @@ func TestScheduler(t *testing.T) {
 			var gotAssumedPod *v1.Pod
 			var gotBinding *v1.Binding
 			configurator := &FakeConfigurator{
-				Config: &Config{
+				Config: &factory.Config{
 					SchedulerCache: &schedulertesting.FakeCache{
 						ForgetFunc: func(pod *v1.Pod) {
 							gotForgetPod = pod
@@ -212,7 +219,7 @@ func TestScheduler(t *testing.T) {
 						[]*v1.Node{&testNode},
 					),
 					Algorithm: item.algo,
-					GetBinder: func(pod *v1.Pod) Binder {
+					GetBinder: func(pod *v1.Pod) factory.Binder {
 						return fakeBinder{func(b *v1.Binding) error {
 							gotBinding = b
 							return item.injectBindError
@@ -232,6 +239,122 @@ func TestScheduler(t *testing.T) {
 			}
 
 			s, _ := NewFromConfigurator(configurator, nil...)
+			called := make(chan struct{})
+			events := eventBroadcaster.StartEventWatcher(func(e *v1.Event) {
+				if e, a := item.eventReason, e.Reason; e != a {
+					t.Errorf("expected %v, got %v", e, a)
+				}
+				close(called)
+			})
+			s.scheduleOne()
+			<-called
+			if e, a := item.expectAssumedPod, gotAssumedPod; !reflect.DeepEqual(e, a) {
+				t.Errorf("assumed pod: wanted %v, got %v", e, a)
+			}
+			if e, a := item.expectErrorPod, gotPod; !reflect.DeepEqual(e, a) {
+				t.Errorf("error pod: wanted %v, got %v", e, a)
+			}
+			if e, a := item.expectForgetPod, gotForgetPod; !reflect.DeepEqual(e, a) {
+				t.Errorf("forget pod: wanted %v, got %v", e, a)
+			}
+			if e, a := item.expectError, gotError; !reflect.DeepEqual(e, a) {
+				t.Errorf("error: wanted %v, got %v", e, a)
+			}
+			if e, a := item.expectBind, gotBinding; !reflect.DeepEqual(e, a) {
+				t.Errorf("error: %s", diff.ObjectDiff(e, a))
+			}
+			events.Stop()
+		})
+	}
+}
+
+func TestNew(t *testing.T) {
+	_, s, closeFn := framework.RunAMaster(nil)
+	defer closeFn()
+
+	ns := framework.CreateTestingNamespace("configmap", s, t)
+	defer framework.DeleteTestingNamespace(ns, s, t)
+
+	clientSet := clientset.NewForConfigOrDie(&restclient.Config{Host: s.URL, ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}}})
+	defer clientSet.CoreV1().Nodes().DeleteCollection(nil, metav1.ListOptions{})
+	informerFactory := informers.NewSharedInformerFactory(clientSet, 0)
+
+	defaultSource := "DefaultProvider"
+
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(t.Logf).Stop()
+	errS := errors.New("scheduler")
+	errB := errors.New("binder")
+	testNode := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "machine1", UID: types.UID("machine1")}}
+
+	table := []struct {
+		name             string
+		injectBindError  error
+		sendPod          *v1.Pod
+		algo             algorithm.ScheduleAlgorithm
+		expectErrorPod   *v1.Pod
+		expectForgetPod  *v1.Pod
+		expectAssumedPod *v1.Pod
+		expectError      error
+		expectBind       *v1.Binding
+		eventReason      string
+	}{
+		{
+			name:             "bind assumed pod scheduled",
+			sendPod:          podWithID("foo", ""),
+			algo:             mockScheduler{testNode.Name, nil},
+			expectBind:       &v1.Binding{ObjectMeta: metav1.ObjectMeta{Name: "foo", UID: types.UID("foo")}, Target: v1.ObjectReference{Kind: "Node", Name: testNode.Name}},
+			expectAssumedPod: podWithID("foo", testNode.Name),
+			eventReason:      "Scheduled",
+		},
+		{
+			name:           "error pod failed scheduling",
+			sendPod:        podWithID("foo", ""),
+			algo:           mockScheduler{testNode.Name, errS},
+			expectError:    errS,
+			expectErrorPod: podWithID("foo", ""),
+			eventReason:    "FailedScheduling",
+		},
+		{
+			name:             "error bind forget pod failed scheduling",
+			sendPod:          podWithID("foo", ""),
+			algo:             mockScheduler{testNode.Name, nil},
+			expectBind:       &v1.Binding{ObjectMeta: metav1.ObjectMeta{Name: "foo", UID: types.UID("foo")}, Target: v1.ObjectReference{Kind: "Node", Name: testNode.Name}},
+			expectAssumedPod: podWithID("foo", testNode.Name),
+			injectBindError:  errB,
+			expectError:      errB,
+			expectErrorPod:   podWithID("foo", testNode.Name),
+			expectForgetPod:  podWithID("foo", testNode.Name),
+			eventReason:      "FailedScheduling",
+		}, {
+			sendPod:     deletingPod("foo"),
+			algo:        mockScheduler{"", nil},
+			eventReason: "FailedScheduling",
+		},
+	}
+
+	for _, item := range table {
+		t.Run(item.name, func(t *testing.T) {
+			var gotError error
+			var gotPod *v1.Pod
+			var gotForgetPod *v1.Pod
+			var gotAssumedPod *v1.Pod
+			var gotBinding *v1.Binding
+
+			s, _ := New(clientSet,
+				informerFactory.Core().V1().Nodes(),
+				factory.NewPodInformer(clientSet, 0),
+				informerFactory.Core().V1().PersistentVolumes(),
+				informerFactory.Core().V1().PersistentVolumeClaims(),
+				informerFactory.Core().V1().ReplicationControllers(),
+				informerFactory.Apps().V1().ReplicaSets(),
+				informerFactory.Apps().V1().StatefulSets(),
+				informerFactory.Core().V1().Services(),
+				informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
+				informerFactory.Storage().V1().StorageClasses(),
+				eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"}),
+				kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &defaultSource})
+
 			called := make(chan struct{})
 			events := eventBroadcaster.StartEventWatcher(func(e *v1.Event) {
 				if e, a := item.eventReason, e.Reason; e != a {
@@ -568,11 +691,11 @@ func setupTestScheduler(queuedPodStore *clientcache.FIFO, scache schedulerintern
 	bindingChan := make(chan *v1.Binding, 1)
 	errChan := make(chan error, 1)
 	configurator := &FakeConfigurator{
-		Config: &Config{
+		Config: &factory.Config{
 			SchedulerCache: scache,
 			NodeLister:     nodeLister,
 			Algorithm:      algo,
-			GetBinder: func(pod *v1.Pod) Binder {
+			GetBinder: func(pod *v1.Pod) factory.Binder {
 				return fakeBinder{func(b *v1.Binding) error {
 					bindingChan <- b
 					return nil
@@ -618,11 +741,11 @@ func setupTestSchedulerLongBindingWithRetry(queuedPodStore *clientcache.FIFO, sc
 		api.DefaultPercentageOfNodesToScore)
 	bindingChan := make(chan *v1.Binding, 2)
 	configurator := &FakeConfigurator{
-		Config: &Config{
+		Config: &factory.Config{
 			SchedulerCache: scache,
 			NodeLister:     nodeLister,
 			Algorithm:      algo,
-			GetBinder: func(pod *v1.Pod) Binder {
+			GetBinder: func(pod *v1.Pod) factory.Binder {
 				return fakeBinder{func(b *v1.Binding) error {
 					time.Sleep(bindingTime)
 					bindingChan <- b
