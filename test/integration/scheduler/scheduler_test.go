@@ -76,7 +76,7 @@ func TestSchedulerCreation(t *testing.T) {
 	_, s, closeFn := framework.RunAMaster(nil)
 	defer closeFn()
 
-	ns := framework.CreateTestingNamespace("configmap", s, t)
+	ns := framework.CreateTestingNamespace("defaultScheduler", s, t)
 	defer framework.DeleteTestingNamespace(ns, s, t)
 
 	clientSet := clientset.NewForConfigOrDie(&restclient.Config{Host: s.URL, ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}}})
@@ -87,24 +87,8 @@ func TestSchedulerCreation(t *testing.T) {
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(t.Logf).Stop()
 
-	node := &v1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: "node-multi-scheduler-test-node"},
-		Spec:       v1.NodeSpec{Unschedulable: false},
-		Status: v1.NodeStatus{
-			Capacity: v1.ResourceList{
-				v1.ResourcePods: *resource.NewQuantity(32, resource.DecimalSI),
-			},
-		},
-	}
-	clientSet.CoreV1().Nodes().Create(node)
-
-	testPodFitsDefault, err := createPausePod(clientSet, initPausePod(clientSet, &pausePodConfig{Name: "pod-fits-default", Namespace: ns.Name, SchedulerName: defaultSource}))
-	if err != nil {
-		t.Fatalf("Failed to create pod: %v", err)
-	}
-
-	defaultBindTimeout := int64(30)
-	sched, err := scheduler.New(clientSet,
+	defaultBindTimeout := int64(100)
+	_, err := scheduler.New(clientSet,
 		informerFactory.Core().V1().Nodes(),
 		factory.NewPodInformer(clientSet, 0),
 		informerFactory.Core().V1().PersistentVolumes(),
@@ -121,16 +105,6 @@ func TestSchedulerCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create scheduler: %v", err)
 	}
-	//defer sched.StopEverything()
-	//
-	go sched.Run()
-
-	if err := waitForPodToSchedule(clientSet, testPodFitsDefault); err != nil {
-		t.Errorf("Test MultiScheduler: %s Pod not scheduled: %v", testPodFitsDefault.Name, err)
-	} else {
-		t.Logf("Test MultiScheduler: %s Pod scheduled", testPodFitsDefault.Name)
-	}
-
 }
 
 // TestSchedulerCreationFromConfigMap verifies that scheduler can be created
