@@ -277,7 +277,7 @@ func TestNew(t *testing.T) {
 
 	clientSet := clientset.NewForConfigOrDie(&restclient.Config{Host: s.URL, ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}}})
 	defer clientSet.CoreV1().Nodes().DeleteCollection(nil, metav1.ListOptions{})
-	informerFactory := informers.NewSharedInformerFactory(clientSet, 0)
+	_ := informers.NewSharedInformerFactory(clientSet, 0)
 	/*
 		defaultSource := "DefaultProvider"
 		eventBroadcaster := record.NewBroadcaster()
