@@ -72,6 +72,42 @@ func PriorityTwo(pod *v1.Pod, nodeNameToInfo map[string]*schedulercache.NodeInfo
 	return []schedulerapi.HostPriority{}, nil
 }
 
+func TestNew(t *testing.T) {
+	_, s, closeFn := framework.RunAMaster(nil)
+	defer closeFn()
+
+	ns := framework.CreateTestingNamespace("configmap", s, t)
+	defer framework.DeleteTestingNamespace(ns, s, t)
+
+	clientSet := clientset.NewForConfigOrDie(&restclient.Config{Host: s.URL, ContentConfig: restclient.ContentConfig{GroupVersion: &schema.GroupVersion{Group: "", Version: "v1"}}})
+	defer clientSet.CoreV1().Nodes().DeleteCollection(nil, metav1.ListOptions{})
+	informers.NewSharedInformerFactory(clientSet, 0)
+
+	/*
+		defaultSource := "DefaultProvider"
+		eventBroadcaster := record.NewBroadcaster()
+
+		_, err := New(clientSet,
+			informerFactory.Core().V1().Nodes(),
+			factory.NewPodInformer(clientSet, 0),
+			informerFactory.Core().V1().PersistentVolumes(),
+			informerFactory.Core().V1().PersistentVolumeClaims(),
+			informerFactory.Core().V1().ReplicationControllers(),
+			informerFactory.Apps().V1().ReplicaSets(),
+			informerFactory.Apps().V1().StatefulSets(),
+			informerFactory.Core().V1().Services(),
+			informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
+			informerFactory.Storage().V1().StorageClasses(),
+			eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"}),
+			kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &defaultSource})
+
+		if err != nil {
+			t.Errorf("expected err: new, got nothing")
+		}
+	*/
+
+}
+
 // TestSchedulerCreationFromConfigMap verifies that scheduler can be created
 // from configurations provided by a ConfigMap object and then verifies that the
 // configuration is applied correctly.
