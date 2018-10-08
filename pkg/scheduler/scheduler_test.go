@@ -282,105 +282,23 @@ func TestNew(t *testing.T) {
 	defaultSource := "DefaultProvider"
 
 	eventBroadcaster := record.NewBroadcaster()
-	eventBroadcaster.StartLogging(t.Logf).Stop()
-	errS := errors.New("scheduler")
-	errB := errors.New("binder")
-	testNode := v1.Node{ObjectMeta: metav1.ObjectMeta{Name: "machine1", UID: types.UID("machine1")}}
 
-	table := []struct {
-		name             string
-		injectBindError  error
-		sendPod          *v1.Pod
-		algo             algorithm.ScheduleAlgorithm
-		expectErrorPod   *v1.Pod
-		expectForgetPod  *v1.Pod
-		expectAssumedPod *v1.Pod
-		expectError      error
-		expectBind       *v1.Binding
-		eventReason      string
-	}{
-		{
-			name:             "bind assumed pod scheduled",
-			sendPod:          podWithID("foo", ""),
-			algo:             mockScheduler{testNode.Name, nil},
-			expectBind:       &v1.Binding{ObjectMeta: metav1.ObjectMeta{Name: "foo", UID: types.UID("foo")}, Target: v1.ObjectReference{Kind: "Node", Name: testNode.Name}},
-			expectAssumedPod: podWithID("foo", testNode.Name),
-			eventReason:      "Scheduled",
-		},
-		{
-			name:           "error pod failed scheduling",
-			sendPod:        podWithID("foo", ""),
-			algo:           mockScheduler{testNode.Name, errS},
-			expectError:    errS,
-			expectErrorPod: podWithID("foo", ""),
-			eventReason:    "FailedScheduling",
-		},
-		{
-			name:             "error bind forget pod failed scheduling",
-			sendPod:          podWithID("foo", ""),
-			algo:             mockScheduler{testNode.Name, nil},
-			expectBind:       &v1.Binding{ObjectMeta: metav1.ObjectMeta{Name: "foo", UID: types.UID("foo")}, Target: v1.ObjectReference{Kind: "Node", Name: testNode.Name}},
-			expectAssumedPod: podWithID("foo", testNode.Name),
-			injectBindError:  errB,
-			expectError:      errB,
-			expectErrorPod:   podWithID("foo", testNode.Name),
-			expectForgetPod:  podWithID("foo", testNode.Name),
-			eventReason:      "FailedScheduling",
-		}, {
-			sendPod:     deletingPod("foo"),
-			algo:        mockScheduler{"", nil},
-			eventReason: "FailedScheduling",
-		},
-	}
+	_, err := New(clientSet,
+		informerFactory.Core().V1().Nodes(),
+		factory.NewPodInformer(clientSet, 0),
+		informerFactory.Core().V1().PersistentVolumes(),
+		informerFactory.Core().V1().PersistentVolumeClaims(),
+		informerFactory.Core().V1().ReplicationControllers(),
+		informerFactory.Apps().V1().ReplicaSets(),
+		informerFactory.Apps().V1().StatefulSets(),
+		informerFactory.Core().V1().Services(),
+		informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
+		informerFactory.Storage().V1().StorageClasses(),
+		eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"}),
+		kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &defaultSource})
 
-	for _, item := range table {
-		t.Run(item.name, func(t *testing.T) {
-			var gotError error
-			var gotPod *v1.Pod
-			var gotForgetPod *v1.Pod
-			var gotAssumedPod *v1.Pod
-			var gotBinding *v1.Binding
-
-			s, _ := New(clientSet,
-				informerFactory.Core().V1().Nodes(),
-				factory.NewPodInformer(clientSet, 0),
-				informerFactory.Core().V1().PersistentVolumes(),
-				informerFactory.Core().V1().PersistentVolumeClaims(),
-				informerFactory.Core().V1().ReplicationControllers(),
-				informerFactory.Apps().V1().ReplicaSets(),
-				informerFactory.Apps().V1().StatefulSets(),
-				informerFactory.Core().V1().Services(),
-				informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
-				informerFactory.Storage().V1().StorageClasses(),
-				eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"}),
-				kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &defaultSource})
-
-			called := make(chan struct{})
-			events := eventBroadcaster.StartEventWatcher(func(e *v1.Event) {
-				if e, a := item.eventReason, e.Reason; e != a {
-					t.Errorf("expected %v, got %v", e, a)
-				}
-				close(called)
-			})
-			s.scheduleOne()
-			<-called
-			if e, a := item.expectAssumedPod, gotAssumedPod; !reflect.DeepEqual(e, a) {
-				t.Errorf("assumed pod: wanted %v, got %v", e, a)
-			}
-			if e, a := item.expectErrorPod, gotPod; !reflect.DeepEqual(e, a) {
-				t.Errorf("error pod: wanted %v, got %v", e, a)
-			}
-			if e, a := item.expectForgetPod, gotForgetPod; !reflect.DeepEqual(e, a) {
-				t.Errorf("forget pod: wanted %v, got %v", e, a)
-			}
-			if e, a := item.expectError, gotError; !reflect.DeepEqual(e, a) {
-				t.Errorf("error: wanted %v, got %v", e, a)
-			}
-			if e, a := item.expectBind, gotBinding; !reflect.DeepEqual(e, a) {
-				t.Errorf("error: %s", diff.ObjectDiff(e, a))
-			}
-			events.Stop()
-		})
+	if err != nil {
+		t.Errorf("expected err: new, got nothing")
 	}
 }
 
