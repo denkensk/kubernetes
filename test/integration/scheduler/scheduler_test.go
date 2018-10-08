@@ -98,14 +98,14 @@ func TestSchedulerCreation(t *testing.T) {
 	}
 	clientSet.CoreV1().Nodes().Create(node)
 
-	defaultScheduler := "default-scheduler"
-	testPodFitsDefault, err := createPausePod(clientSet, initPausePod(clientSet, &pausePodConfig{Name: "pod-fits-default", Namespace: ns.Name, SchedulerName: defaultScheduler}))
-	if err != nil {
-		t.Fatalf("Failed to create pod: %v", err)
-	}
+	//defaultScheduler := "default-scheduler"
+	//testPodFitsDefault, err := createPausePod(clientSet, initPausePod(clientSet, &pausePodConfig{Name: "pod-fits-default", Namespace: ns.Name, SchedulerName: defaultScheduler}))
+	//if err != nil {
+	//	t.Fatalf("Failed to create pod: %v", err)
+	//}
 
 	defaultBindTimeout := int64(30)
-	sched, err := scheduler.New(clientSet,
+	_, err := scheduler.New(clientSet,
 		informerFactory.Core().V1().Nodes(),
 		factory.NewPodInformer(clientSet, 0),
 		informerFactory.Core().V1().PersistentVolumes(),
@@ -119,15 +119,18 @@ func TestSchedulerCreation(t *testing.T) {
 		eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"}),
 		kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &defaultSource},
 		scheduler.WithBindTimeoutSeconds(defaultBindTimeout))
-	defer sched.StopEverything()
-
-	go sched.Run()
-
-	if err := waitForPodToSchedule(clientSet, testPodFitsDefault); err != nil {
-		t.Errorf("Test MultiScheduler: %s Pod not scheduled: %v", testPodFitsDefault.Name, err)
-	} else {
-		t.Logf("Test MultiScheduler: %s Pod scheduled", testPodFitsDefault.Name)
+	if err != nil {
+		t.Fatalf("Failed to create scheduler: %v", err)
 	}
+	//defer sched.StopEverything()
+	//
+	//go sched.Run()
+	//
+	//if err := waitForPodToSchedule(clientSet, testPodFitsDefault); err != nil {
+	//	t.Errorf("Test MultiScheduler: %s Pod not scheduled: %v", testPodFitsDefault.Name, err)
+	//} else {
+	//	t.Logf("Test MultiScheduler: %s Pod scheduled", testPodFitsDefault.Name)
+	//}
 
 }
 
