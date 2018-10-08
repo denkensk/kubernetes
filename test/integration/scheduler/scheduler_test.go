@@ -85,8 +85,27 @@ func TestSchedulerCreation(t *testing.T) {
 
 	defaultSource := "DefaultProvider"
 	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(t.Logf).Stop()
 
-	_, err := scheduler.New(clientSet,
+	node := &v1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-multi-scheduler-test-node"},
+		Spec:       v1.NodeSpec{Unschedulable: false},
+		Status: v1.NodeStatus{
+			Capacity: v1.ResourceList{
+				v1.ResourcePods: *resource.NewQuantity(32, resource.DecimalSI),
+			},
+		},
+	}
+	clientSet.CoreV1().Nodes().Create(node)
+
+	defaultScheduler := "default-scheduler"
+	testPodFitsDefault, err := createPausePod(clientSet, initPausePod(clientSet, &pausePodConfig{Name: "pod-fits-default", Namespace: ns.Name, SchedulerName: defaultScheduler}))
+	if err != nil {
+		t.Fatalf("Failed to create pod: %v", err)
+	}
+
+	defaultBindTimeout := int64(30)
+	sched, err := scheduler.New(clientSet,
 		informerFactory.Core().V1().Nodes(),
 		factory.NewPodInformer(clientSet, 0),
 		informerFactory.Core().V1().PersistentVolumes(),
@@ -98,10 +117,16 @@ func TestSchedulerCreation(t *testing.T) {
 		informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
 		informerFactory.Storage().V1().StorageClasses(),
 		eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"}),
-		kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &defaultSource})
+		kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &defaultSource},
+		scheduler.WithBindTimeoutSeconds(defaultBindTimeout))
+	defer sched.StopEverything()
 
-	if err != nil {
-		t.Errorf("expected err: new, got nothing")
+	go sched.Run()
+
+	if err := waitForPodToSchedule(clientSet, testPodFitsDefault); err != nil {
+		t.Errorf("Test MultiScheduler: %s Pod not scheduled: %v", testPodFitsDefault.Name, err)
+	} else {
+		t.Logf("Test MultiScheduler: %s Pod scheduled", testPodFitsDefault.Name)
 	}
 
 }
