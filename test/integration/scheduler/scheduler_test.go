@@ -72,7 +72,7 @@ func PriorityTwo(pod *v1.Pod, nodeNameToInfo map[string]*schedulercache.NodeInfo
 	return []schedulerapi.HostPriority{}, nil
 }
 
-func TestNew(t *testing.T) {
+func TestSchedulerCreation(t *testing.T) {
 	_, s, closeFn := framework.RunAMaster(nil)
 	defer closeFn()
 
