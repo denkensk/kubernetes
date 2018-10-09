@@ -29,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/diff"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	clientsetfake "k8s.io/client-go/kubernetes/fake"
@@ -40,6 +41,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	"k8s.io/kubernetes/pkg/scheduler/api"
 	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
+	schedulercache "k8s.io/kubernetes/pkg/scheduler/cache"
 	"k8s.io/kubernetes/pkg/scheduler/core"
 	"k8s.io/kubernetes/pkg/scheduler/factory"
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
@@ -122,6 +124,14 @@ func podWithResources(id, desiredHost string, limits v1.ResourceList, requests v
 	return pod
 }
 
+func PredicateOne(pod *v1.Pod, meta algorithm.PredicateMetadata, nodeInfo *schedulercache.NodeInfo) (bool, []algorithm.PredicateFailureReason, error) {
+	return true, nil, nil
+}
+
+func PriorityOne(pod *v1.Pod, nodeNameToInfo map[string]*schedulercache.NodeInfo, nodes []*v1.Node) (api.HostPriorityList, error) {
+	return []api.HostPriority{}, nil
+}
+
 type mockScheduler struct {
 	machine string
 	err     error
@@ -150,7 +160,11 @@ func TestSchedulerCreation(t *testing.T) {
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartLogging(t.Logf).Stop()
 
-	defaultBindTimeout := int64(100)
+	defaultBindTimeout := int64(30)
+	factory.RegisterFitPredicate("PredicateOne", PredicateOne)
+	factory.RegisterPriorityFunction("PriorityOne", PriorityOne, 1)
+	factory.RegisterAlgorithmProvider(defaultSource, sets.NewString("PredicateOne"), sets.NewString("PriorityOne"))
+
 	_, err := New(client,
 		informerFactory.Core().V1().Nodes(),
 		factory.NewPodInformer(client, 0),
@@ -165,6 +179,7 @@ func TestSchedulerCreation(t *testing.T) {
 		eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"}),
 		kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &defaultSource},
 		WithBindTimeoutSeconds(defaultBindTimeout))
+
 	if err != nil {
 		t.Fatalf("Failed to create scheduler: %v", err)
 	}
