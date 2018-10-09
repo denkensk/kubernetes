@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/diff"
 	"k8s.io/apimachinery/pkg/util/wait"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	clientsetfake "k8s.io/client-go/kubernetes/fake"
 	clientcache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
@@ -38,11 +39,13 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/algorithm"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	"k8s.io/kubernetes/pkg/scheduler/api"
+	kubeschedulerconfig "k8s.io/kubernetes/pkg/scheduler/apis/config"
 	"k8s.io/kubernetes/pkg/scheduler/core"
 	"k8s.io/kubernetes/pkg/scheduler/factory"
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
 	schedulertesting "k8s.io/kubernetes/pkg/scheduler/testing"
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
+	"k8s.io/kubernetes/staging/src/k8s.io/client-go/informers"
 )
 
 type fakeBinder struct {
@@ -137,6 +140,34 @@ func (es mockScheduler) Prioritizers() []algorithm.PriorityConfig {
 
 func (es mockScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister, scheduleErr error) (*v1.Node, []*v1.Pod, []*v1.Pod, error) {
 	return nil, nil, nil, nil
+}
+
+func TestSchedulerCreation(t *testing.T) {
+	client := clientsetfake.NewSimpleClientset()
+	informerFactory := informers.NewSharedInformerFactory(client, 0)
+
+	defaultSource := "DefaultProvider"
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(t.Logf).Stop()
+
+	defaultBindTimeout := int64(100)
+	_, err := New(client,
+		informerFactory.Core().V1().Nodes(),
+		factory.NewPodInformer(client, 0),
+		informerFactory.Core().V1().PersistentVolumes(),
+		informerFactory.Core().V1().PersistentVolumeClaims(),
+		informerFactory.Core().V1().ReplicationControllers(),
+		informerFactory.Apps().V1().ReplicaSets(),
+		informerFactory.Apps().V1().StatefulSets(),
+		informerFactory.Core().V1().Services(),
+		informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
+		informerFactory.Storage().V1().StorageClasses(),
+		eventBroadcaster.NewRecorder(legacyscheme.Scheme, v1.EventSource{Component: "scheduler"}),
+		kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &defaultSource},
+		WithBindTimeoutSeconds(defaultBindTimeout))
+	if err != nil {
+		t.Fatalf("Failed to create scheduler: %v", err)
+	}
 }
 
 func TestScheduler(t *testing.T) {
