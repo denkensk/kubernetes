@@ -34,12 +34,14 @@ import (
 
 	"github.com/golang/glog"
 
+	"container/list"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	priorityutil "k8s.io/kubernetes/pkg/scheduler/algorithm/priorities/util"
+	"k8s.io/kubernetes/pkg/scheduler/core/equivalence"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
@@ -181,7 +183,7 @@ type PriorityQueue struct {
 	// schedule. Head of heap is the highest priority pod.
 	activeQ *Heap
 	// unschedulableQ holds pods that have been tried and determined unschedulable.
-	unschedulableQ *UnschedulablePodsMap
+	unschedulableQ *UnschedulableequivalenceClassesMap
 	// nominatedPods is a map keyed by a node name and the value is a list of
 	// pods which are nominated to run on the node. These are pods which can be in
 	// the activeQ or unschedulableQ.
@@ -196,6 +198,8 @@ type PriorityQueue struct {
 	// closed indicates that the queue is closed.
 	// It is mainly used to let Pop() exit its control loop while waiting for an item.
 	closed bool
+
+	equivalenceCache *equivalence.EquivalenceCache
 }
 
 // Making sure that PriorityQueue implements SchedulingQueue.
@@ -204,9 +208,10 @@ var _ = SchedulingQueue(&PriorityQueue{})
 // NewPriorityQueue creates a PriorityQueue object.
 func NewPriorityQueue() *PriorityQueue {
 	pq := &PriorityQueue{
-		activeQ:        newHeap(cache.MetaNamespaceKeyFunc, util.HigherPriorityPod),
-		unschedulableQ: newUnschedulablePodsMap(),
-		nominatedPods:  map[string][]*v1.Pod{},
+		activeQ:          newHeap(equivalence.MetaNamespaceKeyFunc, equivalence.HigherPriorityEquivalenceClass),
+		unschedulableQ:   newUnschedulablePodsMap(),
+		nominatedPods:    map[string][]*v1.Pod{},
+		equivalenceCache: equivalence.NewEquivalenceCache(),
 	}
 	pq.cond.L = &pq.lock
 	return pq
@@ -256,18 +261,39 @@ func (p *PriorityQueue) updateNominatedPod(oldPod, newPod *v1.Pod) {
 func (p *PriorityQueue) Add(pod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	err := p.activeQ.Add(pod)
+
+	hash := equivalence.GetEquivHash(pod)
+	var equivalenceClass *equivalence.Class
+	if _, ok := p.equivalenceCache.Cache[hash]; ok {
+		equivalenceClass = p.equivalenceCache.Cache[hash]
+		glog.Errorf("1111%v", equivalenceClass)
+		equivalenceClass.Mu.Lock()
+		equivalenceClass.PodList.PushBack(pod)
+		equivalenceClass.Mu.Unlock()
+		glog.Errorf("ADD: PodList-Len: v%", equivalenceClass.PodList.Len())
+	} else {
+		equivalenceClass = equivalence.NewClass(pod)
+		equivalenceClass.Mu.Lock()
+		equivalenceClass.PodList.PushBack(pod)
+		equivalenceClass.Mu.Unlock()
+		p.equivalenceCache.Cache[hash] = equivalenceClass
+		glog.Errorf("ADD: PodList-Len: v%", equivalenceClass.PodList.Len())
+	}
+
+	// equivalenceClass is new to activeQ, add it.
+	err := p.activeQ.Add(equivalenceClass)
 	if err != nil {
 		glog.Errorf("Error adding pod %v/%v to the scheduling queue: %v", pod.Namespace, pod.Name, err)
 	} else {
-		if p.unschedulableQ.get(pod) != nil {
+		if p.unschedulableQ.get(equivalenceClass) != nil {
 			glog.Errorf("Error: pod %v/%v is already in the unschedulable queue.", pod.Namespace, pod.Name)
 			p.deleteNominatedPodIfExists(pod)
-			p.unschedulableQ.delete(pod)
+			p.unschedulableQ.delete(equivalenceClass)
 		}
 		p.addNominatedPodIfNeeded(pod)
 		p.cond.Broadcast()
 	}
+	glog.Errorf("ADD: p.activeQ.data.queue %d", len(p.activeQ.data.queue))
 	return err
 }
 
@@ -276,13 +302,23 @@ func (p *PriorityQueue) Add(pod *v1.Pod) error {
 func (p *PriorityQueue) AddIfNotPresent(pod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	if p.unschedulableQ.get(pod) != nil {
+
+	equivalenceClass := equivalence.NewClass(pod)
+	var next *list.Element
+	for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+		if e.Value.(*v1.Pod) == pod {
+			return nil
+		}
+		next = e.Next()
+	}
+	equivalenceClass.PodList.PushBack(pod)
+
+	_, okActiveQ, _ := p.activeQ.Get(equivalenceClass)
+	if okActiveQ || p.unschedulableQ.get(equivalenceClass) != nil {
 		return nil
 	}
-	if _, exists, _ := p.activeQ.Get(pod); exists {
-		return nil
-	}
-	err := p.activeQ.Add(pod)
+
+	err := p.activeQ.Add(equivalenceClass)
 	if err != nil {
 		glog.Errorf("Error adding pod %v/%v to the scheduling queue: %v", pod.Namespace, pod.Name, err)
 	} else {
@@ -303,18 +339,20 @@ func isPodUnschedulable(pod *v1.Pod) bool {
 func (p *PriorityQueue) AddUnschedulableIfNotPresent(pod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	if p.unschedulableQ.get(pod) != nil {
+	hash := equivalence.GetEquivHash(pod)
+	equivalenceClass := p.equivalenceCache.Cache[hash]
+	if p.unschedulableQ.get(equivalenceClass) != nil {
 		return fmt.Errorf("pod is already present in unschedulableQ")
 	}
-	if _, exists, _ := p.activeQ.Get(pod); exists {
+	if _, exists, _ := p.activeQ.Get(equivalenceClass); exists {
 		return fmt.Errorf("pod is already present in the activeQ")
 	}
 	if !p.receivedMoveRequest && isPodUnschedulable(pod) {
-		p.unschedulableQ.addOrUpdate(pod)
+		p.unschedulableQ.addOrUpdate(equivalenceClass)
 		p.addNominatedPodIfNeeded(pod)
 		return nil
 	}
-	err := p.activeQ.Add(pod)
+	err := p.activeQ.Add(equivalenceClass)
 	if err == nil {
 		p.addNominatedPodIfNeeded(pod)
 		p.cond.Broadcast()
@@ -328,23 +366,42 @@ func (p *PriorityQueue) AddUnschedulableIfNotPresent(pod *v1.Pod) error {
 func (p *PriorityQueue) Pop() (*v1.Pod, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	for len(p.activeQ.data.queue) == 0 {
-		// When the queue is empty, invocation of Pop() is blocked until new item is enqueued.
-		// When Close() is called, the p.closed is set and the condition is broadcast,
-		// which causes this loop to continue and return from the Pop().
-		if p.closed {
-			return nil, fmt.Errorf(queueClosed)
+	for {
+		glog.Errorf("POP: p.activeQ.data.queue %d", len(p.activeQ.data.queue))
+		for len(p.activeQ.data.queue) == 0 {
+			// When the queue is empty, invocation of Pop() is blocked until new item is enqueued.
+			// When Close() is called, the p.closed is set and the condition is broadcast,
+			// which causes this loop to continue and return from the Pop().
+			if p.closed {
+				return nil, fmt.Errorf(queueClosed)
+			}
+			p.cond.Wait()
 		}
-		p.cond.Wait()
+
+		obj, err := p.activeQ.Pop()
+		equivalenceClass := obj.(*equivalence.Class)
+
+		// p.deleteNominatedPodIfExists(pod)
+		p.receivedMoveRequest = false
+
+		glog.Errorf("equivalenceClass.PodList.Len() %d", equivalenceClass.PodList.Len())
+
+		// check the podList len
+		if equivalenceClass.PodList.Len() > 0 {
+			return equivalenceClass.PodList.Front().Value.(*v1.Pod), err
+		}
 	}
-	obj, err := p.activeQ.Pop()
-	if err != nil {
-		return nil, err
-	}
-	pod := obj.(*v1.Pod)
-	p.deleteNominatedPodIfExists(pod)
-	p.receivedMoveRequest = false
-	return pod, err
+
+	/*
+		obj, err := p.activeQ.Pop()
+		if err != nil {
+			return nil, err
+		}
+		pod := obj.(*v1.Pod)
+		p.deleteNominatedPodIfExists(pod)
+		p.receivedMoveRequest = false
+		return pod, err
+	*/
 }
 
 // isPodUpdated checks if the pod is updated in a way that it may have become
@@ -366,28 +423,41 @@ func isPodUpdated(oldPod, newPod *v1.Pod) bool {
 func (p *PriorityQueue) Update(oldPod, newPod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	// If the pod is already in the active queue, just update it there.
-	if _, exists, _ := p.activeQ.Get(newPod); exists {
+
+	hash := equivalence.GetEquivHash(oldPod)
+	equivalenceClass := p.equivalenceCache.Cache[hash]
+	if _, exists, _ := p.activeQ.Get(equivalenceClass); exists {
 		p.updateNominatedPod(oldPod, newPod)
-		err := p.activeQ.Update(newPod)
-		return err
+		var next *list.Element
+		for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+			if e.Value.(*v1.Pod) == oldPod {
+				e.Value = newPod
+				break
+			}
+			next = e.Next()
+		}
 	}
+
 	// If the pod is in the unschedulable queue, updating it may make it schedulable.
-	if usPod := p.unschedulableQ.get(newPod); usPod != nil {
+	if usPod := p.unschedulableQ.get(equivalenceClass); usPod != nil {
 		p.updateNominatedPod(oldPod, newPod)
 		if isPodUpdated(oldPod, newPod) {
-			p.unschedulableQ.delete(usPod)
-			err := p.activeQ.Add(newPod)
-			if err == nil {
-				p.cond.Broadcast()
+			var next *list.Element
+			for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+				if e.Value.(*v1.Pod) == oldPod {
+					e.Value = newPod
+					break
+				}
+				next = e.Next()
 			}
-			return err
 		}
-		p.unschedulableQ.addOrUpdate(newPod)
-		return nil
 	}
+
 	// If pod is not in any of the two queue, we put it in the active queue.
-	err := p.activeQ.Add(newPod)
+	equivalenceClass = equivalence.NewClass(newPod)
+	equivalenceClass.PodList.PushBack(newPod)
+	p.equivalenceCache.Cache[hash] = equivalenceClass
+	err := p.activeQ.Add(equivalenceClass)
 	if err == nil {
 		p.addNominatedPodIfNeeded(newPod)
 		p.cond.Broadcast()
@@ -400,10 +470,32 @@ func (p *PriorityQueue) Update(oldPod, newPod *v1.Pod) error {
 func (p *PriorityQueue) Delete(pod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	p.deleteNominatedPodIfExists(pod)
-	err := p.activeQ.Delete(pod)
-	if err != nil { // The item was probably not found in the activeQ.
-		p.unschedulableQ.delete(pod)
+
+	hash := equivalence.GetEquivHash(pod)
+	if equivalenceClass, ok := p.equivalenceCache.Cache[hash]; ok {
+		var next *list.Element
+		for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+			if e.Value.(*v1.Pod) == pod {
+				equivalenceClass.PodList.Remove(e)
+				break
+			}
+			next = e.Next()
+		}
+
+		p.deleteNominatedPodIfExists(pod)
+		if equivalenceClass.PodList.Len() == 0 {
+			err := p.activeQ.Delete(equivalenceClass)
+			if err != nil { // The item was probably not found in the activeQ.
+				p.unschedulableQ.delete(equivalenceClass)
+			}
+		}
+
+		p.deleteNominatedPodIfExists(pod)
+		err := p.activeQ.Delete(equivalenceClass)
+		if err != nil { // The item was probably not found in the activeQ.
+			p.unschedulableQ.delete(equivalenceClass)
+		}
+		return nil
 	}
 	return nil
 }
@@ -431,9 +523,9 @@ func (p *PriorityQueue) AssignedPodUpdated(pod *v1.Pod) {
 func (p *PriorityQueue) MoveAllToActiveQueue() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	for _, pod := range p.unschedulableQ.pods {
-		if err := p.activeQ.Add(pod); err != nil {
-			glog.Errorf("Error adding pod %v/%v to the scheduling queue: %v", pod.Namespace, pod.Name, err)
+	for _, equivalenceClass := range p.unschedulableQ.equivalenceClasses {
+		if err := p.activeQ.Add(equivalenceClass); err != nil {
+			glog.Errorf("Error adding pod to the scheduling queue: %v", equivalenceClass)
 		}
 	}
 	p.unschedulableQ.clear()
@@ -445,8 +537,9 @@ func (p *PriorityQueue) movePodsToActiveQueue(pods []*v1.Pod) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	for _, pod := range pods {
-		if err := p.activeQ.Add(pod); err == nil {
-			p.unschedulableQ.delete(pod)
+		equivalenceClass := equivalence.NewClass(pod)
+		if err := p.activeQ.Add(equivalenceClass); err == nil {
+			p.unschedulableQ.delete(equivalenceClass)
 		} else {
 			glog.Errorf("Error adding pod %v/%v to the scheduling queue: %v", pod.Namespace, pod.Name, err)
 		}
@@ -461,20 +554,27 @@ func (p *PriorityQueue) getUnschedulablePodsWithMatchingAffinityTerm(pod *v1.Pod
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	var podsToMove []*v1.Pod
-	for _, up := range p.unschedulableQ.pods {
-		affinity := up.Spec.Affinity
-		if affinity != nil && affinity.PodAffinity != nil {
-			terms := predicates.GetPodAffinityTerms(affinity.PodAffinity)
-			for _, term := range terms {
-				namespaces := priorityutil.GetNamespacesFromPodAffinityTerm(up, &term)
-				selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
-				if err != nil {
-					glog.Errorf("Error getting label selectors for pod: %v.", up.Name)
+
+	var next *list.Element
+	for _, equivalenceClass := range p.unschedulableQ.equivalenceClasses {
+		if _, ok, _ := p.activeQ.Get(equivalenceClass); !ok {
+			for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+				affinity := e.Value.(*v1.Pod).Spec.Affinity
+				if affinity != nil && affinity.PodAffinity != nil {
+					terms := predicates.GetPodAffinityTerms(affinity.PodAffinity)
+					for _, term := range terms {
+						namespaces := priorityutil.GetNamespacesFromPodAffinityTerm(e.Value.(*v1.Pod), &term)
+						selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
+						if err != nil {
+							glog.Errorf("Error getting label selectors for pod: %v.", e.Value.(*v1.Pod).Name)
+						}
+						if priorityutil.PodMatchesTermsNamespaceAndSelector(pod, namespaces, selector) {
+							podsToMove = append(podsToMove, e.Value.(*v1.Pod))
+							break
+						}
+					}
 				}
-				if priorityutil.PodMatchesTermsNamespaceAndSelector(pod, namespaces, selector) {
-					podsToMove = append(podsToMove, up)
-					break
-				}
+				next = e.Next()
 			}
 		}
 	}
@@ -499,12 +599,23 @@ func (p *PriorityQueue) WaitingPods() []*v1.Pod {
 	defer p.lock.Unlock()
 
 	result := []*v1.Pod{}
-	for _, pod := range p.activeQ.List() {
-		result = append(result, pod.(*v1.Pod))
+	var next *list.Element
+	for _, equivalenceClass := range p.activeQ.List() {
+		for e := equivalenceClass.(*equivalence.Class).PodList.Front(); e != nil; e = next {
+			result = append(result, e.Value.(*v1.Pod))
+			next = e.Next()
+		}
 	}
-	for _, pod := range p.unschedulableQ.pods {
-		result = append(result, pod)
+
+	for _, equivalenceClass := range p.unschedulableQ.equivalenceClasses {
+		if _, ok, _ := p.activeQ.Get(equivalenceClass); !ok {
+			for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+				result = append(result, e.Value.(*v1.Pod))
+				next = e.Next()
+			}
+		}
 	}
+
 	return result
 }
 
@@ -518,42 +629,42 @@ func (p *PriorityQueue) Close() {
 
 // UnschedulablePodsMap holds pods that cannot be scheduled. This data structure
 // is used to implement unschedulableQ.
-type UnschedulablePodsMap struct {
+type UnschedulableequivalenceClassesMap struct {
 	// pods is a map key by a pod's full-name and the value is a pointer to the pod.
-	pods    map[string]*v1.Pod
-	keyFunc func(*v1.Pod) string
+	//pods    map[string]*v1.Pod
+	//keyFunc func(*v1.Pod) string
+	equivalenceClasses map[uint64]*equivalence.Class
 }
 
 // Add adds a pod to the unschedulable pods.
-func (u *UnschedulablePodsMap) addOrUpdate(pod *v1.Pod) {
-	u.pods[u.keyFunc(pod)] = pod
+func (u *UnschedulableequivalenceClassesMap) addOrUpdate(equivalenceClass *equivalence.Class) {
+	u.equivalenceClasses[equivalenceClass.Hash] = equivalenceClass
 }
 
 // Delete deletes a pod from the unschedulable pods.
-func (u *UnschedulablePodsMap) delete(pod *v1.Pod) {
-	delete(u.pods, u.keyFunc(pod))
+func (u *UnschedulableequivalenceClassesMap) delete(equivalenceClass *equivalence.Class) {
+	delete(u.equivalenceClasses, equivalenceClass.Hash)
 }
 
 // Get returns the pod if a pod with the same key as the key of the given "pod"
 // is found in the map. It returns nil otherwise.
-func (u *UnschedulablePodsMap) get(pod *v1.Pod) *v1.Pod {
-	podKey := u.keyFunc(pod)
-	if p, exists := u.pods[podKey]; exists {
+func (u *UnschedulableequivalenceClassesMap) get(equivalenceClass *equivalence.Class) *equivalence.Class {
+	equivalenceClassKey := equivalenceClass.Hash
+	if p, exists := u.equivalenceClasses[equivalenceClassKey]; exists {
 		return p
 	}
 	return nil
 }
 
 // Clear removes all the entries from the unschedulable maps.
-func (u *UnschedulablePodsMap) clear() {
-	u.pods = make(map[string]*v1.Pod)
+func (u *UnschedulableequivalenceClassesMap) clear() {
+	u.equivalenceClasses = make(map[uint64]*equivalence.Class)
 }
 
 // newUnschedulablePodsMap initializes a new object of UnschedulablePodsMap.
-func newUnschedulablePodsMap() *UnschedulablePodsMap {
-	return &UnschedulablePodsMap{
-		pods:    make(map[string]*v1.Pod),
-		keyFunc: util.GetPodFullName,
+func newUnschedulablePodsMap() *UnschedulableequivalenceClassesMap {
+	return &UnschedulableequivalenceClassesMap{
+		equivalenceClasses: make(map[uint64]*equivalence.Class),
 	}
 }
 
@@ -662,13 +773,16 @@ type Heap struct {
 // already exists.
 func (h *Heap) Add(obj interface{}) error {
 	key, err := h.data.keyFunc(obj)
+	glog.Errorf("heap-add-1 %s", key)
 	if err != nil {
 		return cache.KeyError{Obj: obj, Err: err}
 	}
 	if _, exists := h.data.items[key]; exists {
+		glog.Errorf("heap-add-2")
 		h.data.items[key].obj = obj
 		heap.Fix(h.data, h.data.items[key].index)
 	} else {
+		glog.Errorf("heap-add-3")
 		heap.Push(h.data, &itemKeyValue{key, obj})
 	}
 	return nil
@@ -708,10 +822,12 @@ func (h *Heap) Delete(obj interface{}) error {
 
 // Pop returns the head of the heap.
 func (h *Heap) Pop() (interface{}, error) {
+	glog.Errorf("heap-Pop-1")
 	obj := heap.Pop(h.data)
 	if obj != nil {
 		return obj, nil
 	}
+	glog.Errorf("heap-Pop-2")
 	return nil, fmt.Errorf("object was removed from heap data")
 }
 

@@ -17,14 +17,11 @@ limitations under the License.
 package queue
 
 import (
-	"fmt"
 	"reflect"
-	"sync"
 	"testing"
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
 var negPriority, lowPriority, midPriority, highPriority, veryHighPriority = int32(-100), int32(0), int32(100), int32(1000), int32(10000)
@@ -97,26 +94,34 @@ func TestPriorityQueue_Add(t *testing.T) {
 	q.Add(&medPriorityPod)
 	q.Add(&unschedulablePod)
 	q.Add(&highPriorityPod)
+	t.Errorf("1")
 	expectedNominatedPods := map[string][]*v1.Pod{
 		"node1": {&medPriorityPod, &unschedulablePod},
 	}
+	t.Errorf("2")
 	if !reflect.DeepEqual(q.nominatedPods, expectedNominatedPods) {
 		t.Errorf("Unexpected nominated map after adding pods. Expected: %v, got: %v", expectedNominatedPods, q.nominatedPods)
 	}
+	t.Errorf("3")
 	if p, err := q.Pop(); err != nil || p != &highPriorityPod {
 		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod.Name, p.Name)
 	}
+	t.Errorf("4")
 	if p, err := q.Pop(); err != nil || p != &medPriorityPod {
 		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod.Name, p.Name)
 	}
+	t.Errorf("5")
 	if p, err := q.Pop(); err != nil || p != &unschedulablePod {
 		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod.Name, p.Name)
 	}
+	t.Errorf("6")
 	if len(q.nominatedPods) != 0 {
 		t.Errorf("Expected nomindatePods to be empty: %v", q.nominatedPods)
 	}
+	t.Errorf("7")
 }
 
+/*
 func TestPriorityQueue_AddIfNotPresent(t *testing.T) {
 	q := NewPriorityQueue()
 	q.unschedulableQ.addOrUpdate(&highPriNominatedPod)
@@ -512,3 +517,4 @@ func TestSchedulingQueue_Close(t *testing.T) {
 		})
 	}
 }
+*/

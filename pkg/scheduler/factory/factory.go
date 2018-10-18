@@ -632,15 +632,6 @@ func (c *configFactory) updatePodInSchedulingQueue(oldObj, newObj interface{}) {
 	if err := c.podQueue.Update(oldObj.(*v1.Pod), pod); err != nil {
 		runtime.HandleError(fmt.Errorf("unable to update %T: %v", newObj, err))
 	}
-
-	// Invalidate ecache because update Pod could have affected the cached
-	if c.enableEquivalenceClassCache {
-		oldPod := oldObj.(*v1.Pod)
-		hash := c.equivalenceCache.GetEquivHash(oldPod)
-		if uuid, ok := c.equivalenceCache.Cache[hash]; ok && uuid == oldPod.GetUID() {
-			c.equivalenceCache.Invalidate(hash)
-		}
-	}
 }
 
 func (c *configFactory) deletePodFromSchedulingQueue(obj interface{}) {
@@ -665,14 +656,6 @@ func (c *configFactory) deletePodFromSchedulingQueue(obj interface{}) {
 	if c.volumeBinder != nil {
 		// Volume binder only wants to keep unassigned pods
 		c.volumeBinder.DeletePodBindings(pod)
-	}
-
-	// Invalidate ecache because delete Pod could have affected the cached
-	if c.enableEquivalenceClassCache {
-		hash := c.equivalenceCache.GetEquivHash(pod)
-		if uuid, ok := c.equivalenceCache.Cache[hash]; ok && uuid == pod.GetUID() {
-			c.equivalenceCache.Invalidate(hash)
-		}
 	}
 }
 

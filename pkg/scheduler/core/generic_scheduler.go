@@ -127,26 +127,9 @@ func (g *genericScheduler) snapshot() error {
 func (g *genericScheduler) Schedule(pod *v1.Pod, nodeLister algorithm.NodeLister) (string, error) {
 	trace := utiltrace.New(fmt.Sprintf("Scheduling %s/%s", pod.Namespace, pod.Name))
 	defer trace.LogIfLong(100 * time.Millisecond)
-	var (
-		podReschedule bool
-		hash          uint64
-	)
 
 	if err := podPassesBasicChecks(pod, g.pvcLister); err != nil {
 		return "", err
-	}
-
-	if g.enableEquivalenceClassCache {
-		podReschedule = false
-		hash := g.equivalenceCache.GetEquivHash(pod)
-
-		if uuid, ok := g.equivalenceCache.Cache[hash]; ok {
-			if uuid != pod.GetUID() {
-				return "", fmt.Errorf("reject by Equivalence Class")
-			} else {
-				podReschedule = true
-			}
-		}
 	}
 
 	nodes, err := nodeLister.List()
@@ -170,10 +153,6 @@ func (g *genericScheduler) Schedule(pod *v1.Pod, nodeLister algorithm.NodeLister
 	}
 
 	if len(filteredNodes) == 0 {
-		// Pod has failed to schedule,  its hash and UUID will be cached,
-		if g.enableEquivalenceClassCache {
-			g.equivalenceCache.Cache[hash] = pod.GetUID()
-		}
 		return "", &FitError{
 			Pod:              pod,
 			NumAllNodes:      len(nodes),
@@ -201,17 +180,7 @@ func (g *genericScheduler) Schedule(pod *v1.Pod, nodeLister algorithm.NodeLister
 
 	trace.Step("Selecting host")
 
-	selectHost, err := g.selectHost(priorityList)
-	if err != nil {
-		return "", err
-	}
-
-	// Pod is scheduled successfully, its cache will be Invalidated,
-	if g.enableEquivalenceClassCache && podReschedule {
-		g.equivalenceCache.Invalidate(hash)
-	}
-
-	return selectHost, err
+	return g.selectHost(priorityList)
 }
 
 // Prioritizers returns a slice containing all the scheduler's priority

@@ -19,38 +19,77 @@ limitations under the License.
 package equivalence
 
 import (
-	"hash/fnv"
 	"sync"
 
+	"container/list"
+	"fmt"
+	"hash/fnv"
 	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/kubernetes/pkg/scheduler/util"
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
 )
 
+var equivalenceCache *EquivalenceCache
+
+type EquivalenceCache struct {
+	Cache map[uint64]*Class
+}
+
+type Class struct {
+	// Lock to protect class
+	Mu *sync.RWMutex
+	// Equivalence hash
+	Hash uint64
+	// Pods wait for schedule in this Class
+	PodList *list.List
+}
+
+func NewClass(pod *v1.Pod) *Class {
+	equivalencePod := getEquivalencePod(pod)
+	if equivalencePod != nil {
+		hash := fnv.New32a()
+		hashutil.DeepHashObject(hash, equivalencePod)
+		return &Class{
+			Hash:    uint64(hash.Sum32()),
+			PodList: list.New(),
+			Mu:      &sync.RWMutex{},
+		}
+	}
+	return nil
+}
+
+/*
 // EquivalenceCache is a thread safe map saves and reuses the output of predicate
 // it uses hash as key to access those cached results.
 type EquivalenceCache struct {
 	mu    sync.RWMutex
 	Cache map[uint64]types.UID
 }
+*/
 
 // NewEquivalenceCache create an empty equiv class cache.
 func NewEquivalenceCache() *EquivalenceCache {
-	cache := make(map[uint64]types.UID)
-	return &EquivalenceCache{
+	if equivalenceCache != nil {
+		return equivalenceCache
+	}
+	cache := make(map[uint64]*Class)
+	equivalenceCache = &EquivalenceCache{
 		Cache: cache,
 	}
+	return equivalenceCache
 }
 
+/*
 // Invalidate clears cached for the given hash.
 func (c *EquivalenceCache) Invalidate(hash uint64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.Cache, hash)
 }
+*/
 
 // GetEquivHash generate EquivHash for Pod
-func (c *EquivalenceCache) GetEquivHash(pod *v1.Pod) uint64 {
+func GetEquivHash(pod *v1.Pod) uint64 {
 	hash := fnv.New32a()
 	ownerReferences := pod.GetOwnerReferences()
 	if ownerReferences != nil {
@@ -120,4 +159,29 @@ func getEquivalencePod(pod *v1.Pod) *equivalencePod {
 	}
 	// TODO(misterikkit): Also normalize nested maps and slices.
 	return ep
+}
+
+// MetaNamespaceKeyFunc is a convenient default KeyFunc which knows how to make
+// keys for API objects which implement meta.Interface.
+// The key uses the format <namespace>/<name> unless <namespace> is empty, then
+// it's just <name>.
+//
+// TODO: replace key-as-string with a key-as-struct so that this
+// packing/unpacking won't be necessary.
+func MetaNamespaceKeyFunc(obj interface{}) (string, error) {
+	if obj == nil {
+		return "", fmt.Errorf("obj is nil")
+	}
+	equivalenceClass := obj.(*Class)
+	hash := (*equivalenceClass).Hash
+	return string(hash), nil
+}
+
+// HigherPriorityPod return true when priority of the first pod is higher than
+// the second one. It takes arguments of the type "interface{}" to be used with
+// SortableList, but expects those arguments to be *v1.Pod.
+func HigherPriorityEquivalenceClass(class1, class2 interface{}) bool {
+	pod1 := class1.(*Class).PodList.Front().Value
+	pod2 := class2.(*Class).PodList.Front().Value
+	return util.GetPodPriority(pod1.(*v1.Pod)) > util.GetPodPriority(pod2.(*v1.Pod))
 }

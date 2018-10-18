@@ -37,6 +37,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/util"
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
 
+	"container/list"
 	"github.com/golang/glog"
 	"k8s.io/kubernetes/pkg/scheduler/core/equivalence"
 )
@@ -384,93 +385,131 @@ func (sched *Scheduler) bind(assumed *v1.Pod, b *v1.Binding) error {
 // scheduleOne does the entire scheduling workflow for a single pod.  It is serialized on the scheduling algorithm's host fitting.
 func (sched *Scheduler) scheduleOne() {
 	pod := sched.config.NextPod()
-	// pod could be nil when schedulerQueue is closed
 	if pod == nil {
 		return
 	}
-	if pod.DeletionTimestamp != nil {
-		sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
-		glog.V(3).Infof("Skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
+
+	hash := equivalence.GetEquivHash(pod)
+	if _, ok := sched.config.Ecache.Cache[hash]; !ok {
 		return
 	}
 
-	glog.V(3).Infof("Attempting to schedule pod: %v/%v", pod.Namespace, pod.Name)
+	equivalenceClass := sched.config.Ecache.Cache[hash]
 
-	// Synchronously attempt to find a fit for the pod.
-	start := time.Now()
-	suggestedHost, err := sched.schedule(pod)
-	if err != nil {
-		// schedule() may have failed because the pod would not fit on any host, so we try to
-		// preempt, with the expectation that the next time the pod is tried for scheduling it
-		// will fit due to the preemption. It is also possible that a different pod will schedule
-		// into the resources that were preempted, but this is harmless.
-		if fitError, ok := err.(*core.FitError); ok {
-			preemptionStartTime := time.Now()
-			sched.preempt(pod, fitError)
-			metrics.PreemptionAttempts.Inc()
-			metrics.SchedulingAlgorithmPremptionEvaluationDuration.Observe(metrics.SinceInMicroseconds(preemptionStartTime))
-			metrics.SchedulingLatency.WithLabelValues(metrics.PreemptionEvaluation).Observe(metrics.SinceInSeconds(preemptionStartTime))
-			// Pod did not fit anywhere, so it is counted as a failure. If preemption
-			// succeeds, the pod should get counted as a success the next time we try to
-			// schedule it. (hopefully)
-			metrics.PodScheduleFailures.Inc()
-		} else {
-			glog.Errorf("error selecting node for pod: %v", err)
-			metrics.PodScheduleErrors.Inc()
+	index := 0
+	var next *list.Element
+	for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+		glog.Errorf("scheduleOne: index1 v%", index)
+		pod := e.Value.(*v1.Pod)
+		//glog.Errorf("schedulerOne pod: v%/v%", pod.Namespace, pod.Name)
+		// pod could be nil when schedulerQueue is closed
+		if pod == nil {
+			return
 		}
-		return
-	}
-	metrics.SchedulingAlgorithmLatency.Observe(metrics.SinceInMicroseconds(start))
-	// Tell the cache to assume that a pod now is running on a given node, even though it hasn't been bound yet.
-	// This allows us to keep scheduling without waiting on binding to occur.
-	assumedPod := pod.DeepCopy()
-
-	// Assume volumes first before assuming the pod.
-	//
-	// If all volumes are completely bound, then allBound is true and binding will be skipped.
-	//
-	// Otherwise, binding of volumes is started after the pod is assumed, but before pod binding.
-	//
-	// This function modifies 'assumedPod' if volume binding is required.
-	allBound, err := sched.assumeVolumes(assumedPod, suggestedHost)
-	if err != nil {
-		glog.Errorf("error assuming volumes: %v", err)
-		metrics.PodScheduleErrors.Inc()
-		return
-	}
-
-	// assume modifies `assumedPod` by setting NodeName=suggestedHost
-	err = sched.assume(assumedPod, suggestedHost)
-	if err != nil {
-		glog.Errorf("error assuming pod: %v", err)
-		metrics.PodScheduleErrors.Inc()
-		return
-	}
-	// bind the pod to its host asynchronously (we can do this b/c of the assumption step above).
-	go func() {
-		// Bind volumes first before Pod
-		if !allBound {
-			err := sched.bindVolumes(assumedPod)
-			if err != nil {
-				glog.Errorf("error binding volumes: %v", err)
-				metrics.PodScheduleErrors.Inc()
-				return
-			}
+		if pod.DeletionTimestamp != nil {
+			sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
+			glog.V(3).Infof("Skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
+			return
 		}
 
-		err := sched.bind(assumedPod, &v1.Binding{
-			ObjectMeta: metav1.ObjectMeta{Namespace: assumedPod.Namespace, Name: assumedPod.Name, UID: assumedPod.UID},
-			Target: v1.ObjectReference{
-				Kind: "Node",
-				Name: suggestedHost,
-			},
-		})
-		metrics.E2eSchedulingLatency.Observe(metrics.SinceInMicroseconds(start))
+		glog.V(3).Infof("Attempting to schedule pod: %v/%v", pod.Namespace, pod.Name)
+
+		// Synchronously attempt to find a fit for the pod.
+		start := time.Now()
+		suggestedHost, err := sched.schedule(pod)
 		if err != nil {
-			glog.Errorf("error binding pod: %v", err)
-			metrics.PodScheduleErrors.Inc()
-		} else {
-			metrics.PodScheduleSuccesses.Inc()
+			// schedule() may have failed because the pod would not fit on any host, so we try to
+			// preempt, with the expectation that the next time the pod is tried for scheduling it
+			// will fit due to the preemption. It is also possible that a different pod will schedule
+			// into the resources that were preempted, but this is harmless.
+			if fitError, ok := err.(*core.FitError); ok {
+				preemptionStartTime := time.Now()
+				sched.preempt(pod, fitError)
+				metrics.PreemptionAttempts.Inc()
+				metrics.SchedulingAlgorithmPremptionEvaluationDuration.Observe(metrics.SinceInMicroseconds(preemptionStartTime))
+				metrics.SchedulingLatency.WithLabelValues(metrics.PreemptionEvaluation).Observe(metrics.SinceInSeconds(preemptionStartTime))
+				// Pod did not fit anywhere, so it is counted as a failure. If preemption
+				// succeeds, the pod should get counted as a success the next time we try to
+				// schedule it. (hopefully)
+				metrics.PodScheduleFailures.Inc()
+			} else {
+				glog.Errorf("error selecting node for pod: %v", err)
+				metrics.PodScheduleErrors.Inc()
+			}
+			return
 		}
-	}()
+		//glog.Errorf("schedulerOne suggestedHost: v%", suggestedHost)
+		metrics.SchedulingAlgorithmLatency.Observe(metrics.SinceInMicroseconds(start))
+		// Tell the cache to assume that a pod now is running on a given node, even though it hasn't been bound yet.
+		// This allows us to keep scheduling without waiting on binding to occur.
+		assumedPod := pod.DeepCopy()
+
+		// Assume volumes first before assuming the pod.
+		//
+		// If all volumes are completely bound, then allBound is true and binding will be skipped.
+		//
+		// Otherwise, binding of volumes is started after the pod is assumed, but before pod binding.
+		//
+		// This function modifies 'assumedPod' if volume binding is required.
+		allBound, err := sched.assumeVolumes(assumedPod, suggestedHost)
+		if err != nil {
+			glog.Errorf("error assuming volumes: %v", err)
+			metrics.PodScheduleErrors.Inc()
+			return
+		}
+
+		// assume modifies `assumedPod` by setting NodeName=suggestedHost
+		err = sched.assume(assumedPod, suggestedHost)
+		if err != nil {
+			glog.Errorf("error assuming pod: %v", err)
+			metrics.PodScheduleErrors.Inc()
+			return
+		}
+		// bind the pod to its host asynchronously (we can do this b/c of the assumption step above).
+		go func() {
+			// Bind volumes first before Pod
+			if !allBound {
+				err := sched.bindVolumes(assumedPod)
+				if err != nil {
+					glog.Errorf("error binding volumes: %v", err)
+					metrics.PodScheduleErrors.Inc()
+					return
+				}
+			}
+
+			err := sched.bind(assumedPod, &v1.Binding{
+				ObjectMeta: metav1.ObjectMeta{Namespace: assumedPod.Namespace, Name: assumedPod.Name, UID: assumedPod.UID},
+				Target: v1.ObjectReference{
+					Kind: "Node",
+					Name: suggestedHost,
+				},
+			})
+			metrics.E2eSchedulingLatency.Observe(metrics.SinceInMicroseconds(start))
+			if err != nil {
+				glog.Errorf("error binding pod: %v", err)
+				metrics.PodScheduleErrors.Inc()
+			} else {
+				metrics.PodScheduleSuccesses.Inc()
+			}
+		}()
+
+		next = e.Next()
+		equivalenceClass.Mu.Lock()
+		equivalenceClass.PodList.Remove(e)
+		equivalenceClass.Mu.Unlock()
+		equivalenceClass.PodList.Len()
+		glog.Errorf("scheduleOne: equivalenceClass.PodList.Len(): v%", equivalenceClass.PodList.Len())
+
+		index += 1
+		glog.Errorf("scheduleOne: index2 v%", index)
+
+	}
+
+	//equivalenceClass.Mu.Lock()
+	//if equivalenceClass.PodList.Len() == 0 {
+	//	delete(sched.config.Ecache.Cache, hash)
+	//}
+	//equivalenceClass.Mu.Unlock()
+	//glog.Errorf("equivalenceClass.PodList.Len() %d", equivalenceClass.PodList.Len())
+	glog.Errorf("finish")
 }
