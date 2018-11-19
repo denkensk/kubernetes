@@ -90,6 +90,10 @@ func NewEquivalenceCache() *EquivalenceCache {
 	return equivalenceCache
 }
 
+func CleanEquivalenceCache() {
+	equivalenceCache = nil
+}
+
 /*
 // Invalidate clears cached for the given hash.
 func (c *EquivalenceCache) Invalidate(hash uint64) {

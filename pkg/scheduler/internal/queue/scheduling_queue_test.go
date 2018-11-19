@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"fmt"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/kubernetes/pkg/scheduler/core/equivalence"
@@ -173,8 +174,14 @@ func getOwnerReferences(name string) []metav1.OwnerReference {
 	return metaOwnerReferences
 }
 
+func clean(p *PriorityQueue) {
+	equivalence.CleanEquivalenceCache()
+}
+
 func TestPriorityQueue_Add(t *testing.T) {
 	q := NewPriorityQueue()
+	defer clean(q)
+
 	q.Add(&medPriorityPod1)
 	q.Add(&unschedulablePod1)
 	q.Add(&highPriorityPod1)
@@ -232,6 +239,7 @@ func TestPriorityQueue_Add(t *testing.T) {
 
 func TestPriorityQueue_AddIfNotPresent(t *testing.T) {
 	q := NewPriorityQueue()
+	defer clean(q)
 
 	eClass := equivalence.NewClass(&highPriNominatedPod1)
 	q.equivalenceCache.Cache[eClass.Hash] = eClass
@@ -299,6 +307,8 @@ func TestPriorityQueue_AddIfNotPresent(t *testing.T) {
 
 func TestPriorityQueue_AddUnschedulableIfNotPresent(t *testing.T) {
 	q := NewPriorityQueue()
+	defer clean(q)
+
 	q.Add(&highPriNominatedPod1)
 	q.Add(&highPriNominatedPod2)
 	q.AddUnschedulableIfNotPresent(&highPriNominatedPod1) // Must not add anything.
@@ -352,6 +362,8 @@ func TestPriorityQueue_AddUnschedulableIfNotPresent(t *testing.T) {
 
 func TestPriorityQueue_Pop(t *testing.T) {
 	q := NewPriorityQueue()
+	defer clean(q)
+
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -378,6 +390,8 @@ func TestPriorityQueue_Pop(t *testing.T) {
 
 func TestPriorityQueue_Update(t *testing.T) {
 	q := NewPriorityQueue()
+	defer clean(q)
+
 	q.Update(nil, &highPriorityPod1)
 	if _, exists, _ := q.activeQ.Get(equivalence.NewClass(&highPriorityPod1)); !exists {
 		t.Errorf("Expected %v to be added to activeQ.", highPriorityPod1.Name)
@@ -421,6 +435,8 @@ func TestPriorityQueue_Update(t *testing.T) {
 
 func TestPriorityQueue_Delete(t *testing.T) {
 	q := NewPriorityQueue()
+	defer clean(q)
+
 	q.Update(&highPriorityPod1, &highPriNominatedPod1)
 	q.Add(&unschedulablePod1)
 	q.Delete(&highPriNominatedPod1)
@@ -439,18 +455,29 @@ func TestPriorityQueue_Delete(t *testing.T) {
 	}
 }
 
-/*
 func TestPriorityQueue_MoveAllToActiveQueue(t *testing.T) {
 	q := NewPriorityQueue()
-	q.Add(&medPriorityPod)
-	q.unschedulableQ.addOrUpdate(&unschedulablePod)
-	q.unschedulableQ.addOrUpdate(&highPriorityPod)
+	defer clean(q)
+
+	q.Add(&medPriorityPod1)
+
+	eClass := equivalence.NewClass(&unschedulablePod1)
+	q.equivalenceCache.Cache[eClass.Hash] = eClass
+	eClass.PodList.PushBack(&unschedulablePod1)
+	q.unschedulableQ.addOrUpdate(eClass)
+
+	eClass = equivalence.NewClass(&highPriorityPod1)
+	q.equivalenceCache.Cache[eClass.Hash] = eClass
+	eClass.PodList.PushBack(&highPriorityPod1)
+	q.unschedulableQ.addOrUpdate(eClass)
+
 	q.MoveAllToActiveQueue()
 	if q.activeQ.data.Len() != 3 {
 		t.Error("Expected all items to be in activeQ.")
 	}
 }
 
+/*
 // TestPriorityQueue_AssignedPodAdded tests AssignedPodAdded. It checks that
 // when a pod with pod affinity is in unschedulableQ and another pod with a
 // matching label is added, the unschedulable pod is moved to activeQ.
@@ -506,24 +533,72 @@ func TestPriorityQueue_AssignedPodAdded(t *testing.T) {
 		t.Error("unschedulablePod is not in the unschedulableQ.")
 	}
 }
+*/
 
 func TestPriorityQueue_WaitingPodsForNode(t *testing.T) {
 	q := NewPriorityQueue()
-	q.Add(&medPriorityPod)
-	q.Add(&unschedulablePod)
-	q.Add(&highPriorityPod)
-	if p, err := q.Pop(); err != nil || p != &highPriorityPod {
-		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod.Name, p.Name)
+	defer clean(q)
+
+	q.Add(&medPriorityPod1)
+	q.Add(&unschedulablePod1)
+	q.Add(&highPriorityPod1)
+	q.Add(&medPriorityPod2)
+	q.Add(&unschedulablePod2)
+	q.Add(&highPriorityPod2)
+
+	p, err := q.Pop()
+	if err != nil || p != &highPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod1.Name, p.Name)
 	}
-	expectedList := []*v1.Pod{&medPriorityPod, &unschedulablePod}
+	l := q.equivalenceCache.Cache[equivalence.GetEquivHash(p)].PodList
+	if l.Front().Value.(*v1.Pod) != &highPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod1.Name, l.Front().Value.(*v1.Pod).Name)
+	}
+	if l.Front().Next().Value.(*v1.Pod) != &highPriorityPod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
+	}
+
+	expectedList := []*v1.Pod{&medPriorityPod1, &unschedulablePod1, &medPriorityPod2, &unschedulablePod2}
 	if !reflect.DeepEqual(expectedList, q.WaitingPodsForNode("node1")) {
 		t.Error("Unexpected list of nominated Pods for node.")
+		t.Errorf("Expected: %v , but got: %v", expectedList, q.WaitingPodsForNode("node1"))
 	}
 	if q.WaitingPodsForNode("node2") != nil {
 		t.Error("Expected list of nominated Pods for node2 to be empty.")
 	}
 }
 
+func TestPriorityQueue_WaitingPods(t *testing.T) {
+	q := NewPriorityQueue()
+	defer clean(q)
+
+	q.Add(&unschedulablePod1)
+	q.Add(&highPriorityPod1)
+	q.Add(&medPriorityPod1)
+	q.Add(&unschedulablePod2)
+	q.Add(&highPriorityPod2)
+	q.Add(&medPriorityPod2)
+
+	p, err := q.Pop()
+	if err != nil || p != &highPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod1.Name, p.Name)
+	}
+	l := q.equivalenceCache.Cache[equivalence.GetEquivHash(p)].PodList
+	if l.Front().Value.(*v1.Pod) != &highPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod1.Name, l.Front().Value.(*v1.Pod).Name)
+	}
+	if l.Front().Next().Value.(*v1.Pod) != &highPriorityPod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
+	}
+
+	expectedList := []*v1.Pod{&medPriorityPod1, &medPriorityPod2, &unschedulablePod1, &unschedulablePod2}
+	if !reflect.DeepEqual(expectedList, q.WaitingPods()) {
+		t.Error("Unexpected list of nominated Pods for node.")
+		t.Errorf("Expected: %v , but got: %v", expectedList, q.WaitingPods())
+	}
+}
+
+/*
 func TestUnschedulablePodsMap(t *testing.T) {
 	var pods = []*v1.Pod{
 		{
@@ -673,6 +748,7 @@ func TestUnschedulablePodsMap(t *testing.T) {
 		})
 	}
 }
+*/
 
 func TestSchedulingQueue_Close(t *testing.T) {
 	tests := []struct {
@@ -710,4 +786,3 @@ func TestSchedulingQueue_Close(t *testing.T) {
 		})
 	}
 }
-*/
