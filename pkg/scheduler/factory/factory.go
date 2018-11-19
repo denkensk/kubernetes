@@ -635,6 +635,7 @@ func (c *configFactory) updatePodInSchedulingQueue(oldObj, newObj interface{}) {
 }
 
 func (c *configFactory) deletePodFromSchedulingQueue(obj interface{}) {
+	glog.V(4).Info("deletePodFromSchedulingQueue.....")
 	var pod *v1.Pod
 	switch t := obj.(type) {
 	case *v1.Pod:

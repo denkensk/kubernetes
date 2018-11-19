@@ -22,15 +22,19 @@ import (
 
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/kubernetes/pkg/scheduler/core/equivalence"
+	"sync"
 )
 
 var negPriority, lowPriority, midPriority, highPriority, veryHighPriority = int32(-100), int32(0), int32(100), int32(1000), int32(10000)
 var mediumPriority = (lowPriority + highPriority) / 2
-var highPriorityPod, highPriNominatedPod, medPriorityPod, unschedulablePod = v1.Pod{
+var highPriorityPod1, highPriorityPod2, highPriNominatedPod1, highPriNominatedPod2, medPriorityPod1,
+	medPriorityPod2, unschedulablePod1, unschedulablePod2 = v1.Pod{
 	ObjectMeta: metav1.ObjectMeta{
-		Name:      "hpp",
-		Namespace: "ns1",
-		UID:       "hppns1",
+		Name:            "hpp1",
+		Namespace:       "ns1",
+		UID:             "hpp1ns1",
+		OwnerReferences: getOwnerReferences("high"),
 	},
 	Spec: v1.PodSpec{
 		Priority: &highPriority,
@@ -38,9 +42,21 @@ var highPriorityPod, highPriNominatedPod, medPriorityPod, unschedulablePod = v1.
 },
 	v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "hpp",
-			Namespace: "ns1",
-			UID:       "hppns1",
+			Name:            "hpp2",
+			Namespace:       "ns1",
+			UID:             "hpp2ns1",
+			OwnerReferences: getOwnerReferences("high"),
+		},
+		Spec: v1.PodSpec{
+			Priority: &highPriority,
+		},
+	},
+	v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "hpp1",
+			Namespace:       "ns1",
+			UID:             "hpp1ns1",
+			OwnerReferences: getOwnerReferences("high-Nominated"),
 		},
 		Spec: v1.PodSpec{
 			Priority: &highPriority,
@@ -51,12 +67,27 @@ var highPriorityPod, highPriNominatedPod, medPriorityPod, unschedulablePod = v1.
 	},
 	v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "mpp",
+			Name:            "hpp2",
+			Namespace:       "ns1",
+			UID:             "hpp2ns1",
+			OwnerReferences: getOwnerReferences("high-Nominated"),
+		},
+		Spec: v1.PodSpec{
+			Priority: &highPriority,
+		},
+		Status: v1.PodStatus{
+			NominatedNodeName: "node1",
+		},
+	},
+	v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mpp1",
 			Namespace: "ns2",
-			UID:       "mppns2",
+			UID:       "mpp1ns2",
 			Annotations: map[string]string{
 				"annot2": "val2",
 			},
+			OwnerReferences: getOwnerReferences("medium"),
 		},
 		Spec: v1.PodSpec{
 			Priority: &mediumPriority,
@@ -67,12 +98,54 @@ var highPriorityPod, highPriNominatedPod, medPriorityPod, unschedulablePod = v1.
 	},
 	v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "up",
-			Namespace: "ns1",
-			UID:       "upns1",
+			Name:      "mpp2",
+			Namespace: "ns2",
+			UID:       "mpp2ns2",
 			Annotations: map[string]string{
 				"annot2": "val2",
 			},
+			OwnerReferences: getOwnerReferences("medium"),
+		},
+		Spec: v1.PodSpec{
+			Priority: &mediumPriority,
+		},
+		Status: v1.PodStatus{
+			NominatedNodeName: "node1",
+		},
+	},
+	v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "up1",
+			Namespace: "ns1",
+			UID:       "up1ns1",
+			Annotations: map[string]string{
+				"annot2": "val2",
+			},
+			OwnerReferences: getOwnerReferences("low"),
+		},
+		Spec: v1.PodSpec{
+			Priority: &lowPriority,
+		},
+		Status: v1.PodStatus{
+			Conditions: []v1.PodCondition{
+				{
+					Type:   v1.PodScheduled,
+					Status: v1.ConditionFalse,
+					Reason: v1.PodReasonUnschedulable,
+				},
+			},
+			NominatedNodeName: "node1",
+		},
+	},
+	v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "up2",
+			Namespace: "ns1",
+			UID:       "up2ns1",
+			Annotations: map[string]string{
+				"annot2": "val2",
+			},
+			OwnerReferences: getOwnerReferences("low"),
 		},
 		Spec: v1.PodSpec{
 			Priority: &lowPriority,
@@ -89,36 +162,72 @@ var highPriorityPod, highPriNominatedPod, medPriorityPod, unschedulablePod = v1.
 		},
 	}
 
+func getOwnerReferences(name string) []metav1.OwnerReference {
+	metaOwnerReferences := make([]metav1.OwnerReference, 0)
+	metaOwnerReferences = append(metaOwnerReferences, metav1.OwnerReference{
+		Kind:       "Job",
+		Name:       name,
+		UID:        "0eadea6c-e897-11e8-8123-6c92bf3affc9",
+		APIVersion: "batch/v1",
+	})
+	return metaOwnerReferences
+}
+
 func TestPriorityQueue_Add(t *testing.T) {
 	q := NewPriorityQueue()
-	q.Add(&medPriorityPod)
-	q.Add(&unschedulablePod)
-	q.Add(&highPriorityPod)
-	t.Errorf("1")
+	q.Add(&medPriorityPod1)
+	q.Add(&unschedulablePod1)
+	q.Add(&highPriorityPod1)
+	q.Add(&medPriorityPod2)
+	q.Add(&unschedulablePod2)
+	q.Add(&highPriorityPod2)
 	expectedNominatedPods := map[string][]*v1.Pod{
-		"node1": {&medPriorityPod, &unschedulablePod},
+		"node1": {&medPriorityPod1, &unschedulablePod1, &medPriorityPod2, &unschedulablePod2},
 	}
-	t.Errorf("2")
+
 	if !reflect.DeepEqual(q.nominatedPods, expectedNominatedPods) {
 		t.Errorf("Unexpected nominated map after adding pods. Expected: %v, got: %v", expectedNominatedPods, q.nominatedPods)
 	}
-	t.Errorf("3")
-	if p, err := q.Pop(); err != nil || p != &highPriorityPod {
-		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod.Name, p.Name)
+
+	p, err := q.Pop()
+	if err != nil || p != &highPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod1.Name, p.Name)
 	}
-	t.Errorf("4")
-	if p, err := q.Pop(); err != nil || p != &medPriorityPod {
-		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod.Name, p.Name)
+	l := q.equivalenceCache.Cache[equivalence.GetEquivHash(p)].PodList
+	if l.Front().Value.(*v1.Pod) != &highPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod1.Name, l.Front().Value.(*v1.Pod).Name)
 	}
-	t.Errorf("5")
-	if p, err := q.Pop(); err != nil || p != &unschedulablePod {
-		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod.Name, p.Name)
+	if l.Front().Next().Value.(*v1.Pod) != &highPriorityPod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
 	}
-	t.Errorf("6")
+
+	p, err = q.Pop()
+	if err != nil || p != &medPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod1.Name, p.Name)
+	}
+	l = q.equivalenceCache.Cache[equivalence.GetEquivHash(p)].PodList
+	if l.Front().Value.(*v1.Pod) != &medPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod1.Name, l.Front().Value.(*v1.Pod).Name)
+	}
+	if l.Front().Next().Value.(*v1.Pod) != &medPriorityPod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
+	}
+
+	p, err = q.Pop()
+	if err != nil || p != &unschedulablePod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod1.Name, p.Name)
+	}
+	l = q.equivalenceCache.Cache[equivalence.GetEquivHash(p)].PodList
+	if l.Front().Value.(*v1.Pod) != &unschedulablePod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod1.Name, l.Front().Value.(*v1.Pod).Name)
+	}
+	if l.Front().Next().Value.(*v1.Pod) != &unschedulablePod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
+	}
+
 	if len(q.nominatedPods) != 0 {
 		t.Errorf("Expected nomindatePods to be empty: %v", q.nominatedPods)
 	}
-	t.Errorf("7")
 }
 
 /*
@@ -173,6 +282,7 @@ func TestPriorityQueue_AddUnschedulableIfNotPresent(t *testing.T) {
 		t.Errorf("Pod %v was not found in the unschedulableQ.", unschedulablePod.Name)
 	}
 }
+*/
 
 func TestPriorityQueue_Pop(t *testing.T) {
 	q := NewPriorityQueue()
@@ -180,17 +290,27 @@ func TestPriorityQueue_Pop(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if p, err := q.Pop(); err != nil || p != &medPriorityPod {
-			t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod.Name, p.Name)
+		p, err := q.Pop()
+		if err != nil || p != &medPriorityPod1 {
+			t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod1.Name, p.Name)
+		}
+		l := q.equivalenceCache.Cache[equivalence.GetEquivHash(p)].PodList
+		if l.Front().Value.(*v1.Pod) != &medPriorityPod1 {
+			t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod1.Name, l.Front().Value.(*v1.Pod).Name)
+		}
+		if l.Front().Next().Value.(*v1.Pod) != &medPriorityPod2 {
+			t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
 		}
 		if len(q.nominatedPods) != 0 {
 			t.Errorf("Expected nomindatePods to be empty: %v", q.nominatedPods)
 		}
 	}()
-	q.Add(&medPriorityPod)
+	q.Add(&medPriorityPod1)
+	q.Add(&medPriorityPod2)
 	wg.Wait()
 }
 
+/*
 func TestPriorityQueue_Update(t *testing.T) {
 	q := NewPriorityQueue()
 	q.Update(nil, &highPriorityPod)

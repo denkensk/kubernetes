@@ -395,11 +395,14 @@ func (sched *Scheduler) scheduleOne() {
 	}
 
 	equivalenceClass := sched.config.Ecache.Cache[hash]
-
 	index := 0
 	var next *list.Element
-	for e := equivalenceClass.PodList.Front(); e != nil; e = next {
-		glog.Errorf("scheduleOne: index1 v%", index)
+	glog.V(4).Infof("*******len1: %d", equivalenceClass.PodList.Len())
+	equivalenceClass.Mu.RLock()
+	e := equivalenceClass.PodList.Front()
+	equivalenceClass.Mu.RUnlock()
+	for ; e != nil; e = next {
+		glog.V(4).Infof("index-1: %d", index)
 		pod := e.Value.(*v1.Pod)
 		//glog.Errorf("schedulerOne pod: v%/v%", pod.Namespace, pod.Name)
 		// pod could be nil when schedulerQueue is closed
@@ -417,6 +420,7 @@ func (sched *Scheduler) scheduleOne() {
 		// Synchronously attempt to find a fit for the pod.
 		start := time.Now()
 		suggestedHost, err := sched.schedule(pod)
+		glog.V(4).Infof("*******len2: %d", equivalenceClass.PodList.Len())
 		if err != nil {
 			// schedule() may have failed because the pod would not fit on any host, so we try to
 			// preempt, with the expectation that the next time the pod is tried for scheduling it
@@ -436,6 +440,7 @@ func (sched *Scheduler) scheduleOne() {
 				glog.Errorf("error selecting node for pod: %v", err)
 				metrics.PodScheduleErrors.Inc()
 			}
+			glog.V(4).Infof("*******len3: %d", equivalenceClass.PodList.Len())
 			return
 		}
 		//glog.Errorf("schedulerOne suggestedHost: v%", suggestedHost)
@@ -492,17 +497,18 @@ func (sched *Scheduler) scheduleOne() {
 				metrics.PodScheduleSuccesses.Inc()
 			}
 		}()
-
+		glog.V(4).Info("1111")
 		next = e.Next()
+		glog.V(4).Info("2222")
 		equivalenceClass.Mu.Lock()
+		glog.V(4).Info("3333")
 		equivalenceClass.PodList.Remove(e)
+		glog.V(4).Info("4444")
 		equivalenceClass.Mu.Unlock()
-		equivalenceClass.PodList.Len()
-		glog.Errorf("scheduleOne: equivalenceClass.PodList.Len(): v%", equivalenceClass.PodList.Len())
 
+		glog.V(4).Infof("scheduleOne: equivalenceClass.PodList.Len(): d%", equivalenceClass.PodList.Len())
 		index += 1
-		glog.Errorf("scheduleOne: index2 v%", index)
-
+		glog.V(4).Infof("index-2: %d", index)
 	}
 
 	//equivalenceClass.Mu.Lock()

@@ -23,10 +23,12 @@ import (
 
 	"container/list"
 	"fmt"
+	"github.com/golang/glog"
 	"hash/fnv"
 	"k8s.io/api/core/v1"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 	hashutil "k8s.io/kubernetes/pkg/util/hash"
+	"strconv"
 )
 
 var equivalenceCache *EquivalenceCache
@@ -45,17 +47,26 @@ type Class struct {
 }
 
 func NewClass(pod *v1.Pod) *Class {
-	equivalencePod := getEquivalencePod(pod)
-	if equivalencePod != nil {
-		hash := fnv.New32a()
-		hashutil.DeepHashObject(hash, equivalencePod)
-		return &Class{
-			Hash:    uint64(hash.Sum32()),
-			PodList: list.New(),
-			Mu:      &sync.RWMutex{},
-		}
+	equivHash := GetEquivHash(pod)
+	if _, ok := equivalenceCache.Cache[equivHash]; ok {
+		return equivalenceCache.Cache[equivHash]
 	}
-	return nil
+	//equivalencePod := getEquivalencePod(pod)
+	//if equivalencePod != nil {
+	//	hash := fnv.New32a()
+	//	hashutil.DeepHashObject(hash, equivalencePod)
+	//	return &Class{
+	//		Hash:    equivHash,
+	//		PodList: list.New(),
+	//		Mu:      new(sync.RWMutex),
+	//	}
+	//}
+
+	return &Class{
+		Hash:    equivHash,
+		PodList: list.New(),
+		Mu:      new(sync.RWMutex),
+	}
 }
 
 /*
@@ -93,7 +104,7 @@ func GetEquivHash(pod *v1.Pod) uint64 {
 	hash := fnv.New32a()
 	ownerReferences := pod.GetOwnerReferences()
 	if ownerReferences != nil {
-		hashutil.DeepHashObject(hash, ownerReferences)
+		hashutil.DeepHashObject(hash, ownerReferences[0])
 	} else {
 		equivalencePod := getEquivalencePod(pod)
 		if equivalencePod != nil {
@@ -170,11 +181,13 @@ func getEquivalencePod(pod *v1.Pod) *equivalencePod {
 // packing/unpacking won't be necessary.
 func MetaNamespaceKeyFunc(obj interface{}) (string, error) {
 	if obj == nil {
+		glog.Error("obj is nil")
 		return "", fmt.Errorf("obj is nil")
 	}
 	equivalenceClass := obj.(*Class)
 	hash := (*equivalenceClass).Hash
-	return string(hash), nil
+	glog.Errorf("hash: d%", hash)
+	return strconv.Itoa(int(hash)), nil
 }
 
 // HigherPriorityPod return true when priority of the first pod is higher than

@@ -38,7 +38,7 @@ func BenchmarkScheduling(b *testing.B) {
 		//{nodes: 10, existingPods: 0, minPods: 10},
 		//{nodes: 100, existingPods: 1000, minPods: 100},
 		{nodes: 1000, existingPods: 0, minPods: 100},
-		{nodes: 1000, existingPods: 1000, minPods: 100},
+		//{nodes: 1000, existingPods: 1000, minPods: 100},
 	}
 	setupStrategy := testutils.NewSimpleWithControllerCreatePodStrategy("rc1")
 	testStrategy := testutils.NewSimpleWithControllerCreatePodStrategy("rc2")
