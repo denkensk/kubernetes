@@ -463,45 +463,52 @@ func (p *PriorityQueue) Update(oldPod, newPod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	hash := equivalence.GetEquivHash(oldPod)
-	equivalenceClass := p.equivalenceCache.Cache[hash]
-	if _, exists, _ := p.activeQ.Get(equivalenceClass); exists {
-		p.updateNominatedPod(oldPod, newPod)
-		var next *list.Element
-		for e := equivalenceClass.PodList.Front(); e != nil; e = next {
-			if e.Value.(*v1.Pod).Name == oldPod.Name {
-				e.Value = newPod
-				return nil
-			}
-			next = e.Next()
-		}
-	}
-
-	// If the pod is in the unschedulable queue, updating it may make it schedulable.
-	if usPod := p.unschedulableQ.get(equivalenceClass); usPod != nil {
-		p.updateNominatedPod(oldPod, newPod)
-		if isPodUpdated(oldPod, newPod) {
-			var next *list.Element
-			for e := equivalenceClass.PodList.Front(); e != nil; e = next {
-				if e.Value.(*v1.Pod).Name == oldPod.Name {
-					e.Value = newPod
-					return nil
+	if oldPod != nil {
+		hash := equivalence.GetEquivHash(oldPod)
+		equivalenceClass := p.equivalenceCache.Cache[hash]
+		if equivalenceClass != nil {
+			if _, exists, _ := p.activeQ.Get(equivalenceClass); exists {
+				p.updateNominatedPod(oldPod, newPod)
+				var next *list.Element
+				for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+					if e.Value.(*v1.Pod).Name == oldPod.Name {
+						e.Value = newPod
+						return nil
+					}
+					next = e.Next()
 				}
-				next = e.Next()
+			}
+
+			// If the pod is in the unschedulable queue, updating it may make it schedulable.
+			if usPod := p.unschedulableQ.get(equivalenceClass); usPod != nil {
+				p.updateNominatedPod(oldPod, newPod)
+				if isPodUpdated(oldPod, newPod) {
+					var next *list.Element
+					for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+						if e.Value.(*v1.Pod).Name == oldPod.Name {
+							e.Value = newPod
+							return nil
+						}
+						next = e.Next()
+					}
+				}
 			}
 		}
 	}
 
-	// If pod is not in any of the two queue, we put it in the active queue.
-	equivalenceClass = equivalence.NewClass(newPod)
-	equivalenceClass.PodList.PushBack(newPod)
-	p.equivalenceCache.Cache[hash] = equivalenceClass
-	err := p.activeQ.Add(equivalenceClass)
-	if err == nil {
-		p.addNominatedPodIfNeeded(newPod)
-		p.cond.Broadcast()
+	if newPod != nil {
+		// If pod is not in any of the two queue, we put it in the active queue.
+		equivalenceClass := equivalence.NewClass(newPod)
+		equivalenceClass.PodList.PushBack(newPod)
+		p.equivalenceCache.Cache[equivalenceClass.Hash] = equivalenceClass
+		err := p.activeQ.Add(equivalenceClass)
+		if err == nil {
+			p.addNominatedPodIfNeeded(newPod)
+			p.cond.Broadcast()
+		}
+		return err
 	}
-	return err
+	return nil
 }
 
 // Delete deletes the item from either of the two queues. It assumes the pod is

@@ -376,63 +376,70 @@ func TestPriorityQueue_Pop(t *testing.T) {
 	wg.Wait()
 }
 
-/*
 func TestPriorityQueue_Update(t *testing.T) {
 	q := NewPriorityQueue()
-	q.Update(nil, &highPriorityPod)
-	if _, exists, _ := q.activeQ.Get(&highPriorityPod); !exists {
-		t.Errorf("Expected %v to be added to activeQ.", highPriorityPod.Name)
+	q.Update(nil, &highPriorityPod1)
+	if _, exists, _ := q.activeQ.Get(equivalence.NewClass(&highPriorityPod1)); !exists {
+		t.Errorf("Expected %v to be added to activeQ.", highPriorityPod1.Name)
 	}
+	l := equivalence.NewClass(&highPriorityPod1).PodList
+	if l.Len() != 1 || l.Front().Value.(*v1.Pod) != &highPriorityPod1 {
+		t.Errorf("Expected %v to be added to activeQ.", highPriorityPod1.Name)
+	}
+
 	if len(q.nominatedPods) != 0 {
 		t.Errorf("Expected nomindatePods to be empty: %v", q.nominatedPods)
 	}
 	// Update highPriorityPod and add a nominatedNodeName to it.
-	q.Update(&highPriorityPod, &highPriNominatedPod)
+	q.Update(&highPriorityPod1, &highPriNominatedPod1)
 	if q.activeQ.data.Len() != 1 {
 		t.Error("Expected only one item in activeQ.")
 	}
 	if len(q.nominatedPods) != 1 {
 		t.Errorf("Expected one item in nomindatePods map: %v", q.nominatedPods)
 	}
+
 	// Updating an unschedulable pod which is not in any of the two queues, should
 	// add the pod to activeQ.
-	q.Update(&unschedulablePod, &unschedulablePod)
-	if _, exists, _ := q.activeQ.Get(&unschedulablePod); !exists {
-		t.Errorf("Expected %v to be added to activeQ.", unschedulablePod.Name)
+	q.Update(&unschedulablePod1, &unschedulablePod1)
+	if _, exists, _ := q.activeQ.Get(equivalence.NewClass(&unschedulablePod1)); !exists {
+		t.Errorf("Expected %v to be added to activeQ.", unschedulablePod1.Name)
 	}
+
 	// Updating a pod that is already in activeQ, should not change it.
-	q.Update(&unschedulablePod, &unschedulablePod)
-	if len(q.unschedulableQ.pods) != 0 {
+	q.Update(&unschedulablePod1, &unschedulablePod1)
+	if len(q.unschedulableQ.equivalenceClasses) != 0 {
 		t.Error("Expected unschedulableQ to be empty.")
 	}
-	if _, exists, _ := q.activeQ.Get(&unschedulablePod); !exists {
-		t.Errorf("Expected: %v to be added to activeQ.", unschedulablePod.Name)
+	if _, exists, _ := q.activeQ.Get(equivalence.NewClass(&unschedulablePod1)); !exists {
+		t.Errorf("Expected: %v to be added to activeQ.", unschedulablePod1.Name)
 	}
-	if p, err := q.Pop(); err != nil || p != &highPriNominatedPod {
-		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod.Name, p.Name)
+	if p, err := q.Pop(); err != nil || p != &highPriNominatedPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriorityPod1.Name, p.Name)
 	}
 }
 
 func TestPriorityQueue_Delete(t *testing.T) {
 	q := NewPriorityQueue()
-	q.Update(&highPriorityPod, &highPriNominatedPod)
-	q.Add(&unschedulablePod)
-	q.Delete(&highPriNominatedPod)
-	if _, exists, _ := q.activeQ.Get(&unschedulablePod); !exists {
-		t.Errorf("Expected %v to be in activeQ.", unschedulablePod.Name)
+	q.Update(&highPriorityPod1, &highPriNominatedPod1)
+	q.Add(&unschedulablePod1)
+	q.Delete(&highPriNominatedPod1)
+	if _, exists, _ := q.activeQ.Get(equivalence.NewClass(&unschedulablePod1)); !exists {
+		t.Errorf("Expected %v to be in activeQ.", unschedulablePod1.Name)
 	}
-	if _, exists, _ := q.activeQ.Get(&highPriNominatedPod); exists {
-		t.Errorf("Didn't expect %v to be in activeQ.", highPriorityPod.Name)
+	if _, exists, _ := q.activeQ.Get(equivalence.NewClass(&highPriNominatedPod1)); exists {
+		t.Errorf("Didn't expect %v to be in activeQ.", highPriNominatedPod1.Name)
 	}
 	if len(q.nominatedPods) != 1 {
 		t.Errorf("Expected nomindatePods to have only 'unschedulablePod': %v", q.nominatedPods)
 	}
-	q.Delete(&unschedulablePod)
+	q.Delete(&unschedulablePod1)
 	if len(q.nominatedPods) != 0 {
 		t.Errorf("Expected nomindatePods to be empty: %v", q.nominatedPods)
 	}
 }
 
+/*
 func TestPriorityQueue_MoveAllToActiveQueue(t *testing.T) {
 	q := NewPriorityQueue()
 	q.Add(&medPriorityPod)
