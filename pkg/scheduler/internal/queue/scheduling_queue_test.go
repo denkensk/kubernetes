@@ -230,59 +230,125 @@ func TestPriorityQueue_Add(t *testing.T) {
 	}
 }
 
-/*
 func TestPriorityQueue_AddIfNotPresent(t *testing.T) {
 	q := NewPriorityQueue()
-	q.unschedulableQ.addOrUpdate(&highPriNominatedPod)
-	q.AddIfNotPresent(&highPriNominatedPod) // Must not add anything.
-	q.AddIfNotPresent(&medPriorityPod)
-	q.AddIfNotPresent(&unschedulablePod)
+
+	eClass := equivalence.NewClass(&highPriNominatedPod1)
+	q.equivalenceCache.Cache[eClass.Hash] = eClass
+	eClass.PodList.PushBack(&highPriNominatedPod1)
+	q.unschedulableQ.addOrUpdate(eClass)
+
+	eClass = equivalence.NewClass(&highPriNominatedPod2)
+	q.equivalenceCache.Cache[eClass.Hash] = eClass
+	eClass.PodList.PushBack(&highPriNominatedPod2)
+	q.unschedulableQ.addOrUpdate(eClass)
+
+	q.AddIfNotPresent(&highPriNominatedPod1) // Must not add anything.
+	q.AddIfNotPresent(&medPriorityPod1)
+	q.AddIfNotPresent(&unschedulablePod1)
+	q.AddIfNotPresent(&highPriNominatedPod2) // Must not add anything.
+	q.AddIfNotPresent(&medPriorityPod2)
+	q.AddIfNotPresent(&unschedulablePod2)
 	expectedNominatedPods := map[string][]*v1.Pod{
-		"node1": {&medPriorityPod, &unschedulablePod},
+		"node1": {&medPriorityPod1, &unschedulablePod1, &medPriorityPod2, &unschedulablePod2},
 	}
+
 	if !reflect.DeepEqual(q.nominatedPods, expectedNominatedPods) {
 		t.Errorf("Unexpected nominated map after adding pods. Expected: %v, got: %v", expectedNominatedPods, q.nominatedPods)
 	}
-	if p, err := q.Pop(); err != nil || p != &medPriorityPod {
-		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod.Name, p.Name)
+
+	p, err := q.Pop()
+	if err != nil || p != &medPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod1.Name, p.Name)
 	}
-	if p, err := q.Pop(); err != nil || p != &unschedulablePod {
-		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod.Name, p.Name)
+	l := q.equivalenceCache.Cache[equivalence.GetEquivHash(p)].PodList
+	if l.Front().Value.(*v1.Pod) != &medPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod1.Name, l.Front().Value.(*v1.Pod).Name)
 	}
+	if l.Front().Next().Value.(*v1.Pod) != &medPriorityPod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
+	}
+
+	p, err = q.Pop()
+	if err != nil || p != &unschedulablePod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod1.Name, p.Name)
+	}
+	l = q.equivalenceCache.Cache[equivalence.GetEquivHash(p)].PodList
+	if l.Front().Value.(*v1.Pod) != &unschedulablePod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod1.Name, l.Front().Value.(*v1.Pod).Name)
+	}
+	if l.Front().Next().Value.(*v1.Pod) != &unschedulablePod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
+	}
+
 	if len(q.nominatedPods) != 0 {
 		t.Errorf("Expected nomindatePods to be empty: %v", q.nominatedPods)
 	}
-	if q.unschedulableQ.get(&highPriNominatedPod) != &highPriNominatedPod {
-		t.Errorf("Pod %v was not found in the unschedulableQ.", highPriNominatedPod.Name)
+
+	l = q.unschedulableQ.get(equivalence.NewClass(&highPriNominatedPod1)).PodList
+	if l.Len() != 2 {
+		t.Errorf("Expected highPriNominatedPod PodList len: 2, but got %d.", l.Len())
+	}
+	if l.Front().Value.(*v1.Pod) != &highPriNominatedPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriNominatedPod1.Name, l.Front().Value.(*v1.Pod).Name)
+	}
+	if l.Front().Next().Value.(*v1.Pod) != &highPriNominatedPod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriNominatedPod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
 	}
 }
 
 func TestPriorityQueue_AddUnschedulableIfNotPresent(t *testing.T) {
 	q := NewPriorityQueue()
-	q.Add(&highPriNominatedPod)
-	q.AddUnschedulableIfNotPresent(&highPriNominatedPod) // Must not add anything.
-	q.AddUnschedulableIfNotPresent(&medPriorityPod)      // This should go to activeQ.
-	q.AddUnschedulableIfNotPresent(&unschedulablePod)
+	q.Add(&highPriNominatedPod1)
+	q.Add(&highPriNominatedPod2)
+	q.AddUnschedulableIfNotPresent(&highPriNominatedPod1) // Must not add anything.
+	q.AddUnschedulableIfNotPresent(&medPriorityPod1)      // This should go to activeQ.
+	q.AddUnschedulableIfNotPresent(&unschedulablePod1)
+	q.AddUnschedulableIfNotPresent(&highPriNominatedPod2) // Must not add anything.
+	q.AddUnschedulableIfNotPresent(&medPriorityPod2)      // This should go to activeQ.
+	q.AddUnschedulableIfNotPresent(&unschedulablePod2)
+
 	expectedNominatedPods := map[string][]*v1.Pod{
-		"node1": {&highPriNominatedPod, &medPriorityPod, &unschedulablePod},
+		"node1": {&highPriNominatedPod1, &highPriNominatedPod2, &medPriorityPod1, &unschedulablePod1, &medPriorityPod2, &unschedulablePod2},
 	}
 	if !reflect.DeepEqual(q.nominatedPods, expectedNominatedPods) {
 		t.Errorf("Unexpected nominated map after adding pods. Expected: %v, got: %v", expectedNominatedPods, q.nominatedPods)
 	}
-	if p, err := q.Pop(); err != nil || p != &highPriNominatedPod {
-		t.Errorf("Expected: %v after Pop, but got: %v", highPriNominatedPod.Name, p.Name)
+	p, err := q.Pop()
+	if err != nil || p != &highPriNominatedPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriNominatedPod1.Name, p.Name)
 	}
-	if p, err := q.Pop(); err != nil || p != &medPriorityPod {
-		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod.Name, p.Name)
+	l := q.equivalenceCache.Cache[equivalence.GetEquivHash(p)].PodList
+	if l.Front().Value.(*v1.Pod) != &highPriNominatedPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriNominatedPod1.Name, l.Front().Value.(*v1.Pod).Name)
 	}
-	if len(q.nominatedPods) != 1 {
-		t.Errorf("Expected nomindatePods to have one element: %v", q.nominatedPods)
+	if l.Front().Next().Value.(*v1.Pod) != &highPriNominatedPod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", highPriNominatedPod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
 	}
-	if q.unschedulableQ.get(&unschedulablePod) != &unschedulablePod {
-		t.Errorf("Pod %v was not found in the unschedulableQ.", unschedulablePod.Name)
+
+	p, err = q.Pop()
+	if err != nil || p != &medPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod1.Name, p.Name)
+	}
+	l = q.equivalenceCache.Cache[equivalence.GetEquivHash(p)].PodList
+	if l.Front().Value.(*v1.Pod) != &medPriorityPod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod1.Name, l.Front().Value.(*v1.Pod).Name)
+	}
+	if l.Front().Next().Value.(*v1.Pod) != &medPriorityPod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
+	}
+
+	l = q.unschedulableQ.get(equivalence.NewClass(&unschedulablePod1)).PodList
+	if l.Len() != 2 {
+		t.Errorf("Expected highPriNominatedPod PodList len: 2, but got %d.", l.Len())
+	}
+	if l.Front().Value.(*v1.Pod) != &unschedulablePod1 {
+		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod1.Name, l.Front().Value.(*v1.Pod).Name)
+	}
+	if l.Front().Next().Value.(*v1.Pod) != &unschedulablePod2 {
+		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod2.Name, l.Front().Next().Value.(*v1.Pod).Name)
 	}
 }
-*/
 
 func TestPriorityQueue_Pop(t *testing.T) {
 	q := NewPriorityQueue()

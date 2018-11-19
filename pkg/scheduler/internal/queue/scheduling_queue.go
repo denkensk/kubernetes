@@ -316,18 +316,25 @@ func (p *PriorityQueue) AddIfNotPresent(pod *v1.Pod) error {
 	}
 	equivalenceClass.PodList.PushBack(pod)
 
-	_, okActiveQ, _ := p.activeQ.Get(equivalenceClass)
-	if okActiveQ || p.unschedulableQ.get(equivalenceClass) != nil {
+	if p.unschedulableQ.get(equivalenceClass) != nil {
 		return nil
 	}
 
+	p.addNominatedPodIfNeeded(pod)
+	p.cond.Broadcast()
+
+	_, okActiveQ, _ := p.activeQ.Get(equivalenceClass)
+
+	if okActiveQ {
+		return nil
+	}
+
+	p.equivalenceCache.Cache[equivalence.GetEquivHash(pod)] = equivalenceClass
 	err := p.activeQ.Add(equivalenceClass)
 	if err != nil {
 		glog.Errorf("Error adding pod %v/%v to the scheduling queue: %v", pod.Namespace, pod.Name, err)
-	} else {
-		p.addNominatedPodIfNeeded(pod)
-		p.cond.Broadcast()
 	}
+
 	return err
 }
 
@@ -342,32 +349,46 @@ func isPodUnschedulable(pod *v1.Pod) bool {
 func (p *PriorityQueue) AddUnschedulableIfNotPresent(pod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	hash := equivalence.GetEquivHash(pod)
-	glog.V(4).Infof("AddUnschedulableIfNotPresent hash s%", hash)
-	equivalenceClass := p.equivalenceCache.Cache[hash]
-	//if p.unschedulableQ.get(equivalenceClass) != nil {
-	//	glog.Info("pod is already present in unschedulableQ")
-	//	return fmt.Errorf("pod is already present in unschedulableQ")
-	//}
-	equivalenceClass.Mu.RLock()
-	defer equivalenceClass.Mu.RUnlock()
-	//if _, exists, _ := p.activeQ.Get(equivalenceClass); exists {
-	//	glog.Info("pod is already present in the activeQ")
-	//	glog.V(4).Infof("AddUnschedulableIfNotPresent equivalenceClass.PodList.Len() d%", equivalenceClass.PodList.Len())
-	//	return fmt.Errorf("pod is already present in the activeQ")
-	//}
-	return p.activeQ.Add(equivalenceClass)
+	equivalenceClass := equivalence.NewClass(pod)
+	if p.equivalenceCache.Cache[equivalenceClass.Hash] == nil {
+		p.equivalenceCache.Cache[equivalenceClass.Hash] = equivalenceClass
+	}
 
-	//if !p.receivedMoveRequest && isPodUnschedulable(pod) {
-	//	p.unschedulableQ.addOrUpdate(equivalenceClass)
-	//	p.addNominatedPodIfNeeded(pod)
-	//	return nil
-	//}
+	var next *list.Element
+	var exit bool
+	for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+		if e.Value.(*v1.Pod).Name == pod.Name {
+			exit = true
+		}
+		next = e.Next()
+	}
+	if !exit {
+		equivalenceClass.PodList.PushBack(pod)
+		p.addNominatedPodIfNeeded(pod)
+	}
+
+	if p.unschedulableQ.get(equivalenceClass) != nil {
+		glog.Info("pod is already present in unschedulableQ")
+		return fmt.Errorf("pod is already present in unschedulableQ")
+	}
+
+	//equivalenceClass.Mu.RLock()
+	//defer equivalenceClass.Mu.RUnlock()
+	if _, exists, _ := p.activeQ.Get(equivalenceClass); exists {
+		glog.Info("pod is already present in the activeQ")
+		return fmt.Errorf("pod is already present in the activeQ")
+	}
+
+	if !p.receivedMoveRequest && isPodUnschedulable(pod) {
+		p.unschedulableQ.addOrUpdate(equivalenceClass)
+		return nil
+	}
+	err := p.activeQ.Add(equivalenceClass)
 	//glog.V(4).Infof("AddUnschedulableIfNotPresent equivalenceClass.PodList.Len() d%", equivalenceClass.PodList.Len())
-	//if err == nil {
-	//	p.addNominatedPodIfNeeded(pod)
-	//	p.cond.Broadcast()
-	//}
+	if err == nil {
+		p.cond.Broadcast()
+	}
+	return err
 }
 
 // Pop removes the head of the active queue and returns it. It blocks if the
