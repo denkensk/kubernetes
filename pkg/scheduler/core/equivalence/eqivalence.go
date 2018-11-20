@@ -48,6 +48,9 @@ type Class struct {
 
 func NewClass(pod *v1.Pod) *Class {
 	equivHash := GetEquivHash(pod)
+	if equivalenceCache == nil {
+		equivalenceCache = NewEquivalenceCache()
+	}
 	if _, ok := equivalenceCache.Cache[equivHash]; ok {
 		return equivalenceCache.Cache[equivHash]
 	}

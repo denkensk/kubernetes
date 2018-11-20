@@ -37,6 +37,7 @@ import (
 	"container/list"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
@@ -587,10 +588,7 @@ func (p *PriorityQueue) movePodsToActiveQueue(pods []*v1.Pod) {
 		var equivalenceClass *equivalence.Class
 		if _, ok := p.equivalenceCache.Cache[hash]; ok {
 			equivalenceClass = p.equivalenceCache.Cache[hash]
-			equivalenceClass.Mu.Lock()
 			equivalenceClass.PodList.PushBack(pod)
-			equivalenceClass.Mu.Unlock()
-
 		} else {
 			equivalenceClass = equivalence.NewClass(pod)
 			equivalenceClass.PodList.PushBack(pod)
@@ -614,29 +612,32 @@ func (p *PriorityQueue) getUnschedulablePodsWithMatchingAffinityTerm(pod *v1.Pod
 	defer p.lock.RUnlock()
 	var podsToMove []*v1.Pod
 
+	glog.Errorf("len(p.unschedulableQ.equivalenceClasses) %d.", len(p.unschedulableQ.equivalenceClasses))
 	var next *list.Element
 	for _, equivalenceClass := range p.unschedulableQ.equivalenceClasses {
-		if _, ok, _ := p.activeQ.Get(equivalenceClass); !ok {
-			for e := equivalenceClass.PodList.Front(); e != nil; e = next {
-				affinity := e.Value.(*v1.Pod).Spec.Affinity
-				if affinity != nil && affinity.PodAffinity != nil {
-					terms := predicates.GetPodAffinityTerms(affinity.PodAffinity)
-					for _, term := range terms {
-						namespaces := priorityutil.GetNamespacesFromPodAffinityTerm(e.Value.(*v1.Pod), &term)
-						selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
-						if err != nil {
-							glog.Errorf("Error getting label selectors for pod: %v.", e.Value.(*v1.Pod).Name)
-						}
-						if priorityutil.PodMatchesTermsNamespaceAndSelector(pod, namespaces, selector) {
-							podsToMove = append(podsToMove, e.Value.(*v1.Pod))
-							break
-						}
+		glog.Errorf("equivalenceClass: %v.", equivalenceClass)
+		for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+			affinity := e.Value.(*v1.Pod).Spec.Affinity
+			glog.Errorf("pod: %v.", affinity)
+			if affinity != nil && affinity.PodAffinity != nil {
+				terms := predicates.GetPodAffinityTerms(affinity.PodAffinity)
+				glog.Errorf("terms: %v.", terms)
+				for _, term := range terms {
+					namespaces := priorityutil.GetNamespacesFromPodAffinityTerm(e.Value.(*v1.Pod), &term)
+					selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
+					if err != nil {
+						glog.Errorf("Error getting label selectors for pod: %v.", e.Value.(*v1.Pod).Name)
+					}
+					if priorityutil.PodMatchesTermsNamespaceAndSelector(pod, namespaces, selector) {
+						podsToMove = append(podsToMove, e.Value.(*v1.Pod))
+						break
 					}
 				}
-				next = e.Next()
 			}
+			next = e.Next()
 		}
 	}
+	glog.Errorf("podsToMove: %v.", podsToMove)
 	return podsToMove
 }
 
@@ -656,23 +657,25 @@ func (p *PriorityQueue) WaitingPodsForNode(nodeName string) []*v1.Pod {
 func (p *PriorityQueue) WaitingPods() []*v1.Pod {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-
+	podMap := make(map[types.UID]*v1.Pod)
 	result := []*v1.Pod{}
 	var next *list.Element
 	for _, equivalenceClass := range p.activeQ.List() {
 		for e := equivalenceClass.(*equivalence.Class).PodList.Front(); e != nil; e = next {
-			result = append(result, e.Value.(*v1.Pod))
+			podMap[e.Value.(*v1.Pod).UID] = e.Value.(*v1.Pod)
 			next = e.Next()
 		}
 	}
 
 	for _, equivalenceClass := range p.unschedulableQ.equivalenceClasses {
-		if _, ok, _ := p.activeQ.Get(equivalenceClass); !ok {
-			for e := equivalenceClass.PodList.Front(); e != nil; e = next {
-				result = append(result, e.Value.(*v1.Pod))
-				next = e.Next()
-			}
+		for e := equivalenceClass.PodList.Front(); e != nil; e = next {
+			podMap[e.Value.(*v1.Pod).UID] = e.Value.(*v1.Pod)
+			next = e.Next()
 		}
+	}
+
+	for _, v := range podMap {
+		result = append(result, v)
 	}
 
 	return result
