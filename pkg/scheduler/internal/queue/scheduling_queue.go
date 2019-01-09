@@ -42,6 +42,7 @@ import (
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	priorityutil "k8s.io/kubernetes/pkg/scheduler/algorithm/priorities/util"
+	"k8s.io/kubernetes/pkg/scheduler/internal/queue/equivalence"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
@@ -242,6 +243,9 @@ type PriorityQueue struct {
 	// closed indicates that the queue is closed.
 	// It is mainly used to let Pop() exit its control loop while waiting for an item.
 	closed bool
+
+	// equivalenceClassMap holds equivalence classes.
+	equivalenceClassMap equivalence.ClassMap
 }
 
 // Making sure that PriorityQueue implements SchedulingQueue.
@@ -287,10 +291,18 @@ func NewPriorityQueueWithClock(stop <-chan struct{}, clock util.Clock) *Priority
 		nominatedPods:    newNominatedPodMap(),
 		moveRequestCycle: -1,
 	}
-	pq.cond.L = &pq.lock
-	pq.podBackoffQ = util.NewHeap(cache.MetaNamespaceKeyFunc, pq.podsCompareBackoffCompleted)
 
-	pq.run()
+	// TODO (resouer): Remove this check once we decide to use equivalence class as default implementation.
+	if util.EquivalenceClassEnabled() {
+		pq.equivalenceClassMap = equivalence.NewClassMap()
+		pq.activeQ = util.NewHeap(equivalence.ClassKeyFunc, equivalence.HigherPriorityEquivalenceClass)
+		pq.cond.L = &pq.lock
+	} else {
+		pq.activeQ = util.NewHeap(cache.MetaNamespaceKeyFunc, util.HigherPriorityPod)
+		pq.podBackoffQ = util.NewHeap(cache.MetaNamespaceKeyFunc, pq.podsCompareBackoffCompleted)
+		pq.cond.L = &pq.lock
+		pq.run()
+	}
 
 	return pq
 }
@@ -306,6 +318,20 @@ func (p *PriorityQueue) run() {
 func (p *PriorityQueue) Add(pod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	if util.EquivalenceClassEnabled() {
+		if p.unschedulableQ.get(pod) == nil {
+			if err := p.activeQ.Add(equivalence.NewClass(pod).AddPod(pod)); err != nil {
+				klog.Errorf("Error adding pod %v/%v to the scheduling queue: %v", pod.Namespace, pod.Name, err)
+				return err
+			}
+		}
+		// TODO (denkensk): Use equivalence class for backoff in follow up PR
+		p.nominatedPods.add(pod, "")
+		p.cond.Broadcast()
+		return nil
+	}
+
 	if err := p.activeQ.Add(pod); err != nil {
 		klog.Errorf("Error adding pod %v/%v to the scheduling queue: %v", pod.Namespace, pod.Name, err)
 		return err
@@ -329,6 +355,28 @@ func (p *PriorityQueue) Add(pod *v1.Pod) error {
 func (p *PriorityQueue) AddIfNotPresent(pod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	if util.EquivalenceClassEnabled() {
+		if p.unschedulableQ.get(pod) != nil {
+			return nil
+		}
+		equivalenceClass := equivalence.NewClass(pod).AddPod(pod)
+		if _, exists, _ := p.activeQ.Get(equivalenceClass); exists {
+			p.nominatedPods.add(pod, "")
+			p.cond.Broadcast()
+			return nil
+		}
+		// TODO (denkensk): Use equivalence class for backoff in follow up PR
+		err := p.activeQ.Add(equivalenceClass)
+		if err != nil {
+			klog.Errorf("Error adding pod %v/%v to the scheduling queue: %v", pod.Namespace, pod.Name, err)
+		} else {
+			p.nominatedPods.add(pod, "")
+			p.cond.Broadcast()
+		}
+		return err
+	}
+
 	if p.unschedulableQ.get(pod) != nil {
 		return nil
 	}
@@ -402,6 +450,30 @@ func (p *PriorityQueue) SchedulingCycle() int64 {
 func (p *PriorityQueue) AddUnschedulableIfNotPresent(pod *v1.Pod, podSchedulingCycle int64) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	if util.EquivalenceClassEnabled() {
+		equivalenceClass := equivalence.NewClass(pod).AddPod(pod)
+		p.nominatedPods.add(pod, "")
+
+		if p.unschedulableQ.get(pod) != nil {
+			return fmt.Errorf("pod is already present in unschedulableQ")
+		}
+		if _, exists, _ := p.activeQ.Get(equivalenceClass); exists {
+			return fmt.Errorf("pod is already present in the activeQ")
+		}
+		// TODO (denkensk): Use equivalence class for backoff in follow up PR
+		if !p.receivedMoveRequest && isPodUnschedulable(pod) {
+			p.unschedulableQ.addOrUpdate(pod)
+			return nil
+		}
+
+		err := p.activeQ.Add(equivalenceClass)
+		if err == nil {
+			p.cond.Broadcast()
+		}
+		return err
+	}
+
 	if p.unschedulableQ.get(pod) != nil {
 		return fmt.Errorf("pod is already present in unschedulableQ")
 	}
@@ -496,6 +568,43 @@ func (p *PriorityQueue) flushUnschedulableQLeftover() {
 func (p *PriorityQueue) Pop() (*v1.Pod, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+	if util.EquivalenceClassEnabled() {
+		// This is a dead cycle. If activeQ is not empty, Pop() gets equivalenceClass from activeQ
+		// and returns the first pod, then ends the cycle. If activeQ is empty, Pop() waits atomically
+		// unlocks p.lock, suspends execution of the calling goroutine until new item is enqueued and
+		// will not result in deadlock problem. When Close() is called, the p.closed is set and the condition
+		// is broadcast, then cycle will end.
+		for {
+			for p.activeQ.Len() == 0 {
+				// When the queue is empty, invocation of Pop() is blocked until new item is enqueued.
+				// When Close() is called, the p.closed is set and the condition is broadcast,
+				// which causes this loop to continue and return from the Pop().
+				if p.closed {
+					return nil, fmt.Errorf(queueClosed)
+				}
+				p.cond.Wait()
+			}
+
+			obj, err := p.activeQ.Pop()
+			if err != nil {
+				return nil, err
+			}
+			equivalenceClass := obj.(*equivalence.Class)
+			p.receivedMoveRequest = false
+
+			var pod *v1.Pod
+			// Get the first pod in PodSet. If the podSet is empty, Pop continues loop.
+			equivalenceClass.PodSet.Range(func(k, v interface{}) bool {
+				pod = v.(*v1.Pod)
+				return false
+			})
+			// If the podSet isn't empty, Pop ends Loop and return the first pod.
+			if pod != nil {
+				return pod, nil
+			}
+		}
+	}
+
 	for p.activeQ.Len() == 0 {
 		// When the queue is empty, invocation of Pop() is blocked until new item is enqueued.
 		// When Close() is called, the p.closed is set and the condition is broadcast,
@@ -534,6 +643,36 @@ func isPodUpdated(oldPod, newPod *v1.Pod) bool {
 func (p *PriorityQueue) Update(oldPod, newPod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+	if util.EquivalenceClassEnabled() {
+		// TODO (denkensk): Use equivalence class for backoff in follow up PR
+		if oldPod != nil {
+			equivalenceClass := p.equivalenceClassMap[equivalence.GetEquivHash(oldPod)]
+			if equivalenceClass != nil {
+				if _, exists, _ := p.activeQ.Get(equivalenceClass); exists {
+					p.nominatedPods.update(oldPod, newPod)
+					equivalenceClass.UpdatePod(oldPod, newPod)
+					return nil
+				}
+				// If the pod is in the unschedulable queue, updating it may make it schedulable.
+				if usPod := p.unschedulableQ.get(oldPod); usPod != nil {
+					p.nominatedPods.update(oldPod, newPod)
+					equivalenceClass.UpdatePod(oldPod, newPod)
+					return nil
+				}
+			}
+		}
+
+		if newPod != nil {
+			// If pod is not in any of the two queue, we put it in the active queue.
+			err := p.activeQ.Add(equivalence.NewClass(newPod).AddPod(newPod))
+			if err == nil {
+				p.nominatedPods.add(newPod, "")
+				p.cond.Broadcast()
+			}
+			return err
+		}
+		return nil
+	}
 
 	if oldPod != nil {
 		// If the pod is already in the active queue, just update it there.
@@ -586,6 +725,20 @@ func (p *PriorityQueue) Update(oldPod, newPod *v1.Pod) error {
 func (p *PriorityQueue) Delete(pod *v1.Pod) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	if util.EquivalenceClassEnabled() {
+		p.nominatedPods.delete(pod)
+		if equivalenceClass, ok := p.equivalenceClassMap[equivalence.GetEquivHash(pod)]; ok {
+			if equivalenceClass.DeletePod(pod) {
+				p.activeQ.Delete(equivalenceClass)
+			}
+			// TODO (denkensk): Use equivalence class for backoff in follow up PR
+			p.unschedulableQ.delete(pod)
+			return nil
+		}
+		return nil
+	}
+
 	p.nominatedPods.delete(pod)
 	err := p.activeQ.Delete(pod)
 	if err != nil { // The item was probably not found in the activeQ.
@@ -619,6 +772,18 @@ func (p *PriorityQueue) AssignedPodUpdated(pod *v1.Pod) {
 func (p *PriorityQueue) MoveAllToActiveQueue() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+	if util.EquivalenceClassEnabled() {
+		// TODO (denkensk): Use equivalence class for backoff in follow up PR
+		for _, equivalenceClass := range p.unschedulableQ.equivalenceClasses {
+			if err := p.activeQ.Add(equivalenceClass); err != nil {
+				klog.Errorf("Error adding equivalenceClass to the scheduling queue: %v", equivalenceClass)
+			}
+		}
+		p.unschedulableQ.clear()
+		p.receivedMoveRequest = true
+		p.cond.Broadcast()
+	}
+
 	for _, pod := range p.unschedulableQ.pods {
 		if p.isPodBackingOff(pod) {
 			if err := p.podBackoffQ.Add(pod); err != nil {
@@ -637,6 +802,18 @@ func (p *PriorityQueue) MoveAllToActiveQueue() {
 
 // NOTE: this function assumes lock has been acquired in caller
 func (p *PriorityQueue) movePodsToActiveQueue(pods []*v1.Pod) {
+	if util.EquivalenceClassEnabled() {
+		for _, pod := range pods {
+			if err := p.activeQ.Add(equivalence.NewClass(pod).AddPod(pod)); err == nil {
+				p.unschedulableQ.delete(pod)
+			} else {
+				klog.Errorf("Error adding pod %v/%v to the scheduling queue: %v", pod.Namespace, pod.Name, err)
+			}
+		}
+		p.receivedMoveRequest = true
+		p.cond.Broadcast()
+		return
+	}
 	for _, pod := range pods {
 		if p.isPodBackingOff(pod) {
 			if err := p.podBackoffQ.Add(pod); err != nil {
@@ -658,24 +835,44 @@ func (p *PriorityQueue) movePodsToActiveQueue(pods []*v1.Pod) {
 // NOTE: this function assumes lock has been acquired in caller.
 func (p *PriorityQueue) getUnschedulablePodsWithMatchingAffinityTerm(pod *v1.Pod) []*v1.Pod {
 	var podsToMove []*v1.Pod
+
+	if util.EquivalenceClassEnabled() {
+		for _, equivalenceClass := range p.unschedulableQ.equivalenceClasses {
+			equivalenceClass.PodSet.Range(func(k, v interface{}) bool {
+				if p.hasAffinity(v.(*v1.Pod), pod) {
+					podsToMove = append(podsToMove, v.(*v1.Pod))
+				}
+				return true
+			})
+		}
+		return podsToMove
+	}
+
 	for _, up := range p.unschedulableQ.pods {
-		affinity := up.Spec.Affinity
-		if affinity != nil && affinity.PodAffinity != nil {
-			terms := predicates.GetPodAffinityTerms(affinity.PodAffinity)
-			for _, term := range terms {
-				namespaces := priorityutil.GetNamespacesFromPodAffinityTerm(up, &term)
-				selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
-				if err != nil {
-					klog.Errorf("Error getting label selectors for pod: %v.", up.Name)
-				}
-				if priorityutil.PodMatchesTermsNamespaceAndSelector(pod, namespaces, selector) {
-					podsToMove = append(podsToMove, up)
-					break
-				}
-			}
+		if p.hasAffinity(up, pod) {
+			podsToMove = append(podsToMove, up)
 		}
 	}
 	return podsToMove
+}
+
+// if pod have any affinity term that matches targetPod, return true
+func (p *PriorityQueue) hasAffinity(pod *v1.Pod, targetPod *v1.Pod) bool {
+	affinity := pod.Spec.Affinity
+	if affinity != nil && affinity.PodAffinity != nil {
+		terms := predicates.GetPodAffinityTerms(affinity.PodAffinity)
+		for _, term := range terms {
+			namespaces := priorityutil.GetNamespacesFromPodAffinityTerm(pod, &term)
+			selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
+			if err != nil {
+				klog.Errorf("Error getting label selectors for pod: %v.", pod.Name)
+			}
+			if priorityutil.PodMatchesTermsNamespaceAndSelector(targetPod, namespaces, selector) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // NominatedPodsForNode returns pods that are nominated to run on the given node,
@@ -692,8 +889,28 @@ func (p *PriorityQueue) NominatedPodsForNode(nodeName string) []*v1.Pod {
 func (p *PriorityQueue) PendingPods() []*v1.Pod {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+	var result []*v1.Pod
 
-	result := []*v1.Pod{}
+	if util.EquivalenceClassEnabled() {
+		podMap := make(map[ktypes.UID]*v1.Pod)
+		f := func(k, v interface{}) bool {
+			podMap[v.(*v1.Pod).UID] = v.(*v1.Pod)
+			return true
+		}
+		for _, equivalenceClass := range p.activeQ.List() {
+			equivalenceClass.(*equivalence.Class).PodSet.Range(f)
+		}
+		// TODO (denkensk): Use equivalence class for backoff in follow up PR
+		for _, equivalenceClass := range p.unschedulableQ.equivalenceClasses {
+			equivalenceClass.PodSet.Range(f)
+		}
+
+		for _, v := range podMap {
+			result = append(result, v)
+		}
+		return result
+	}
+
 	for _, pod := range p.activeQ.List() {
 		result = append(result, pod.(*v1.Pod))
 	}
@@ -741,6 +958,9 @@ func (p *PriorityQueue) podsCompareBackoffCompleted(p1, p2 interface{}) bool {
 func (p *PriorityQueue) NumUnschedulablePods() int {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
+	if util.EquivalenceClassEnabled() {
+		return len(p.unschedulableQ.equivalenceClasses)
+	}
 	return len(p.unschedulableQ.pods)
 }
 
@@ -748,23 +968,41 @@ func (p *PriorityQueue) NumUnschedulablePods() int {
 // is used to implement unschedulableQ.
 type UnschedulablePodsMap struct {
 	// pods is a map key by a pod's full-name and the value is a pointer to the pod.
-	pods    map[string]*v1.Pod
-	keyFunc func(*v1.Pod) string
+	pods               map[string]*v1.Pod
+	keyFunc            func(*v1.Pod) string
+	equivalenceClasses map[ktypes.UID]*equivalence.Class
 }
 
 // Add adds a pod to the unschedulable pods.
 func (u *UnschedulablePodsMap) addOrUpdate(pod *v1.Pod) {
-	u.pods[u.keyFunc(pod)] = pod
+	if util.EquivalenceClassEnabled() {
+		if _, ok := u.equivalenceClasses[equivalence.GetEquivHash(pod)]; !ok {
+			u.equivalenceClasses[equivalence.GetEquivHash(pod)] = equivalence.NewClass(pod).AddPod(pod)
+		}
+	} else {
+		u.pods[u.keyFunc(pod)] = pod
+	}
 }
 
 // Delete deletes a pod from the unschedulable pods.
 func (u *UnschedulablePodsMap) delete(pod *v1.Pod) {
-	delete(u.pods, u.keyFunc(pod))
+	if util.EquivalenceClassEnabled() {
+		delete(u.equivalenceClasses, equivalence.GetEquivHash(pod))
+	} else {
+		delete(u.pods, u.keyFunc(pod))
+	}
 }
 
 // Get returns the pod if a pod with the same key as the key of the given "pod"
 // is found in the map. It returns nil otherwise.
 func (u *UnschedulablePodsMap) get(pod *v1.Pod) *v1.Pod {
+	if util.EquivalenceClassEnabled() {
+		if eClass, exists := u.equivalenceClasses[equivalence.GetEquivHash(pod)]; exists {
+			eClass.PodSet.Store(pod.UID, pod)
+			return pod
+		}
+		return nil
+	}
 	podKey := u.keyFunc(pod)
 	if p, exists := u.pods[podKey]; exists {
 		return p
@@ -774,14 +1012,19 @@ func (u *UnschedulablePodsMap) get(pod *v1.Pod) *v1.Pod {
 
 // Clear removes all the entries from the unschedulable maps.
 func (u *UnschedulablePodsMap) clear() {
-	u.pods = make(map[string]*v1.Pod)
+	if util.EquivalenceClassEnabled() {
+		u.equivalenceClasses = make(map[ktypes.UID]*equivalence.Class)
+	} else {
+		u.pods = make(map[string]*v1.Pod)
+	}
 }
 
 // newUnschedulablePodsMap initializes a new object of UnschedulablePodsMap.
 func newUnschedulablePodsMap() *UnschedulablePodsMap {
 	return &UnschedulablePodsMap{
-		pods:    make(map[string]*v1.Pod),
-		keyFunc: util.GetPodFullName,
+		pods:               make(map[string]*v1.Pod),
+		keyFunc:            util.GetPodFullName,
+		equivalenceClasses: make(map[ktypes.UID]*equivalence.Class),
 	}
 }
 

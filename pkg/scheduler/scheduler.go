@@ -28,6 +28,7 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -41,6 +42,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/core"
 	"k8s.io/kubernetes/pkg/scheduler/factory"
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
+	"k8s.io/kubernetes/pkg/scheduler/internal/queue/equivalence"
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
@@ -429,23 +431,19 @@ func (sched *Scheduler) bind(assumed *v1.Pod, b *v1.Binding) error {
 	return nil
 }
 
-// scheduleOne does the entire scheduling workflow for a single pod.  It is serialized on the scheduling algorithm's host fitting.
-func (sched *Scheduler) scheduleOne() {
+// doSchedule does the entire scheduling workflow for a single pod. It is serialized on the scheduling algorithm's host
+// fitting. It returns true if pod is successfully scheduled and false if failed
+func (sched *Scheduler) doSchedule(pod *v1.Pod) bool {
 	plugins := sched.config.PluginSet
 	// Remove all plugin context data at the beginning of a scheduling cycle.
 	if plugins.Data().Ctx != nil {
 		plugins.Data().Ctx.Reset()
 	}
 
-	pod := sched.config.NextPod()
-	// pod could be nil when schedulerQueue is closed
-	if pod == nil {
-		return
-	}
 	if pod.DeletionTimestamp != nil {
 		sched.config.Recorder.Eventf(pod, v1.EventTypeWarning, "FailedScheduling", "skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
 		klog.V(3).Infof("Skip schedule deleting pod: %v/%v", pod.Namespace, pod.Name)
-		return
+		return false
 	}
 
 	klog.V(3).Infof("Attempting to schedule pod: %v/%v", pod.Namespace, pod.Name)
@@ -478,7 +476,7 @@ func (sched *Scheduler) scheduleOne() {
 			klog.Errorf("error selecting node for pod: %v", err)
 			metrics.PodScheduleErrors.Inc()
 		}
-		return
+		return false
 	}
 	metrics.SchedulingAlgorithmLatency.Observe(metrics.SinceInSeconds(start))
 	metrics.DeprecatedSchedulingAlgorithmLatency.Observe(metrics.SinceInMicroseconds(start))
@@ -497,7 +495,7 @@ func (sched *Scheduler) scheduleOne() {
 	if err != nil {
 		klog.Errorf("error assuming volumes: %v", err)
 		metrics.PodScheduleErrors.Inc()
-		return
+		return false
 	}
 
 	// Run "reserve" plugins.
@@ -507,7 +505,7 @@ func (sched *Scheduler) scheduleOne() {
 			sched.recordSchedulingFailure(assumedPod, err, SchedulerError,
 				fmt.Sprintf("reserve plugin %v failed", pl.Name()))
 			metrics.PodScheduleErrors.Inc()
-			return
+			return false
 		}
 	}
 	// assume modifies `assumedPod` by setting NodeName=scheduleResult.SuggestedHost
@@ -515,7 +513,7 @@ func (sched *Scheduler) scheduleOne() {
 	if err != nil {
 		klog.Errorf("error assuming pod: %v", err)
 		metrics.PodScheduleErrors.Inc()
-		return
+		return false
 	}
 	// bind the pod to its host asynchronously (we can do this b/c of the assumption step above).
 	go func() {
@@ -570,4 +568,41 @@ func (sched *Scheduler) scheduleOne() {
 			metrics.PodScheduleSuccesses.Inc()
 		}
 	}()
+	return true
+}
+
+// scheduleOne does the entire scheduling workflow. if equivalence class feature is enabled,
+// Get the PodSet for the candidate pod and terate PodSet to do schedule one by one. Then,
+// delete the successfully scheduled pods from PodSet of this `Class`. If one pod failed to schedule,
+// the scheduler should return error, then the `Class` will be added to `unschedulableQ`. In this way,
+// we saved scheduling cycles for all the rest of pods in this `Class`.
+func (sched *Scheduler) scheduleOne() {
+	pod := sched.config.NextPod()
+	// pod could be nil when schedulerQueue is closed
+	if pod == nil {
+		return
+	}
+
+	if util.EquivalenceClassEnabled() {
+		var (
+			podSet           map[types.UID]*v1.Pod
+			equivalenceClass *equivalence.Class
+		)
+		podSet = make(map[types.UID]*v1.Pod)
+		equivalenceClass = equivalence.NewClass(pod)
+		equivalenceClass.PodSet.Range(func(k, v interface{}) bool {
+			podSet[k.(types.UID)] = v.(*v1.Pod)
+			return true
+		})
+		for uid, pod := range podSet {
+			if !sched.doSchedule(pod) {
+				return
+			}
+			equivalenceClass.PodSet.Delete(uid)
+		}
+	} else {
+		if !sched.doSchedule(pod) {
+			return
+		}
+	}
 }
