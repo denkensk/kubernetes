@@ -125,6 +125,12 @@ const (
 	// Add priority to pods. Priority affects scheduling and preemption of pods.
 	PodPriority utilfeature.Feature = "PodPriority"
 
+	// owner: @resouer @denkensk
+	// alpha: v1.14
+	//
+	// Enable equivalence class for scheduler.
+	EquivalenceClass utilfeature.Feature = "EquivalenceClass"
+
 	// owner: @k82cn
 	// beta: v1.12
 	//
@@ -414,6 +420,7 @@ var defaultKubernetesFeatureGates = map[utilfeature.Feature]utilfeature.FeatureS
 	DebugContainers:                             {Default: false, PreRelease: utilfeature.Alpha},
 	PodShareProcessNamespace:                    {Default: true, PreRelease: utilfeature.Beta},
 	PodPriority:                                 {Default: true, PreRelease: utilfeature.Beta},
+	EquivalenceClass:                            {Default: false, PreRelease: utilfeature.Alpha},
 	TaintNodesByCondition:                       {Default: true, PreRelease: utilfeature.Beta},
 	MountPropagation:                            {Default: true, PreRelease: utilfeature.GA, LockToDefault: true}, // remove in 1.14
 	QOSReserved:                                 {Default: false, PreRelease: utilfeature.Alpha},
