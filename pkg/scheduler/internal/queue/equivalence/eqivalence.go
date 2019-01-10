@@ -30,6 +30,7 @@ import (
 
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
@@ -67,6 +68,7 @@ func NewClass(pod *v1.Pod) *Class {
 	classMap = NewClassMap()
 
 	if _, ok := (*classMap)[equivHash]; !ok {
+		klog.Infof("new pod %v %v \n", pod.Name, equivHash)
 		(*classMap)[equivHash] = &Class{
 			Hash:   equivHash,
 			PodSet: new(sync.Map),

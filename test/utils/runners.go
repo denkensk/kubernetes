@@ -48,6 +48,7 @@ import (
 	"k8s.io/kubernetes/pkg/client/clientset_generated/internalclientset"
 
 	"k8s.io/klog"
+	"math/rand"
 )
 
 const (
@@ -1032,8 +1033,14 @@ func NewTestPodCreator(client clientset.Interface, config *TestPodCreatorConfig)
 func (c *TestPodCreator) CreatePods() error {
 	for ns, v := range *(c.Config) {
 		for _, countToStrategy := range v {
-			if err := countToStrategy.Strategy(c.Client, ns, countToStrategy.Count); err != nil {
-				return err
+			klog.Infof("countToStrategy.Count: %v", countToStrategy.Count)
+			for i := 0; i < countToStrategy.Count; i++ {
+				klog.Infof("i: %v", i)
+				if err := countToStrategy.Strategy(c.Client, ns, 1); err != nil {
+					klog.Infof("error！！！！！！: %v", err)
+					i--
+					//return err
+				}
 			}
 		}
 	}
@@ -1124,12 +1131,27 @@ func NewSimpleCreatePodStrategy() TestPodCreateStrategy {
 	return NewCustomCreatePodStrategy(basePod)
 }
 
+//生成随机字符串
+func GetRandomString(l int) string {
+	str := "0123456789abcdefghijklmnopqrstuvwxyz"
+	bytes := []byte(str)
+	result := []byte{}
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < l; i++ {
+		result = append(result, bytes[r.Intn(len(bytes))])
+	}
+	return string(result)
+}
+
 func NewSimpleWithControllerCreatePodStrategy(controllerName string) TestPodCreateStrategy {
 	return func(client clientset.Interface, namespace string, podCount int) error {
+		var randName = GetRandomString(20)
+		controllerName = randName
 		basePod := &v1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: controllerName + "-pod-",
-				Labels:       map[string]string{"name": controllerName},
+				GenerateName:    controllerName + "-pod-",
+				Labels:          map[string]string{"name": controllerName},
+				OwnerReferences: []metav1.OwnerReference{{Kind: "rc", APIVersion: "v1", Name: randName, UID: types.UID(randName)}},
 			},
 			Spec: MakePodSpec(),
 		}
