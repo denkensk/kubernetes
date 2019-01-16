@@ -24,6 +24,9 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	utilfeaturetesting "k8s.io/apiserver/pkg/util/feature/testing"
+	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/kubelet/apis"
 	"k8s.io/kubernetes/test/integration/framework"
 	testutils "k8s.io/kubernetes/test/utils"
@@ -37,13 +40,14 @@ var (
 
 // BenchmarkScheduling benchmarks the scheduling rate when the cluster has
 // various quantities of nodes and scheduled pods.
-func BenchmarkScheduling(b *testing.B) {
+func BenchmarkSchedulingEclass(b *testing.B) {
 	tests := []struct{ nodes, existingPods, minPods int }{
-		{nodes: 100, existingPods: 0, minPods: 100},
-		{nodes: 100, existingPods: 1000, minPods: 100},
-		{nodes: 1000, existingPods: 0, minPods: 100},
-		{nodes: 1000, existingPods: 1000, minPods: 100},
-		{nodes: 5000, existingPods: 1000, minPods: 1000},
+		//{nodes: 100, existingPods: 0, minPods: 100},
+		//{nodes: 100, existingPods: 1000, minPods: 100},
+		//{nodes: 1000, existingPods: 0, minPods: 100},
+		//{nodes: 1000, existingPods: 1000, minPods: 100},
+		//{nodes: 5000, existingPods: 1000, minPods: 1000},
+		{nodes: 5000, existingPods: 0, minPods: 10000},
 	}
 	setupStrategy := testutils.NewSimpleWithControllerCreatePodStrategy("rc1")
 	testStrategy := testutils.NewSimpleWithControllerCreatePodStrategy("rc2")
@@ -218,6 +222,10 @@ func benchmarkScheduling(numNodes, numExistingPods, minPods int,
 	nodeStrategy testutils.PrepareNodeStrategy,
 	setupPodStrategy, testPodStrategy testutils.TestPodCreateStrategy,
 	b *testing.B) {
+	// set EnableEquivalenceClass false
+	defer utilfeaturetesting.SetFeatureGateDuringTest(nil, utilfeature.DefaultFeatureGate,
+		features.EquivalenceClass, true)()
+
 	if b.N < minPods {
 		b.N = minPods
 	}
@@ -263,6 +271,8 @@ func benchmarkScheduling(numNodes, numExistingPods, minPods int,
 		if err != nil {
 			klog.Fatalf("%v", err)
 		}
+		klog.Infof("len(scheduled) %v", len(scheduled))
+		klog.Infof("numExistingPods+b.N %v", numExistingPods+b.N)
 		if len(scheduled) >= numExistingPods+b.N {
 			break
 		}
