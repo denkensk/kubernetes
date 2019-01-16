@@ -1034,9 +1034,9 @@ func (c *TestPodCreator) CreatePods() error {
 	for ns, v := range *(c.Config) {
 		for _, countToStrategy := range v {
 			klog.Infof("countToStrategy.Count: %v", countToStrategy.Count)
-			for i := 0; i < countToStrategy.Count; i++ {
+			for i := 0; i < countToStrategy.Count/100; i++ {
 				klog.Infof("i: %v", i)
-				if err := countToStrategy.Strategy(c.Client, ns, 1); err != nil {
+				if err := countToStrategy.Strategy(c.Client, ns, 100); err != nil {
 					klog.Infof("error！！！！！！: %v", err)
 					i--
 					//return err
