@@ -439,7 +439,7 @@ var defaultKubernetesFeatureGates = map[utilfeature.Feature]utilfeature.FeatureS
 	DebugContainers:                             {Default: false, PreRelease: utilfeature.Alpha},
 	PodShareProcessNamespace:                    {Default: true, PreRelease: utilfeature.Beta},
 	PodPriority:                                 {Default: true, PreRelease: utilfeature.Beta},
-	EquivalenceClass:                            {Default: false, PreRelease: utilfeature.Alpha},
+	EquivalenceClass:                            {Default: true, PreRelease: utilfeature.Alpha},
 	TaintNodesByCondition:                       {Default: true, PreRelease: utilfeature.Beta},
 	MountPropagation:                            {Default: true, PreRelease: utilfeature.GA, LockToDefault: true}, // remove in 1.14
 	QOSReserved:                                 {Default: false, PreRelease: utilfeature.Alpha},
