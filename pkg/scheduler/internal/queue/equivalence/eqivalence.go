@@ -98,7 +98,7 @@ func GetEquivHash(pod *v1.Pod) types.UID {
 	if ownerReferences != nil {
 		return ownerReferences[0].UID
 	}
-
+	klog.Infof("pod not owner")
 	return ""
 }
 
