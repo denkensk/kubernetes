@@ -99,7 +99,7 @@ func GetEquivHash(pod *v1.Pod) types.UID {
 		return ownerReferences[0].UID
 	}
 	klog.Infof("pod not owner")
-	return ""
+	return pod.UID
 }
 
 // AddPod adds the pod in class.PodSet and returns the point to Class.
