@@ -30,6 +30,7 @@ import (
 
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
@@ -45,6 +46,7 @@ var (
 // NewClassMap creates an empty classMap which is a map key by a pod's UID of
 // controllerRef and the value is a pointer to the Class.
 func NewClassMap() ClassMap {
+	klog.Info("create eclass")
 	// Make sure ClassMap is a singleton
 	once.Do(func() {
 		classMap = make(ClassMap)
