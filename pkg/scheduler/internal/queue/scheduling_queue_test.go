@@ -958,8 +958,8 @@ func TestHighProirotyFlushUnschedulableQLeftover(t *testing.T) {
 		},
 	}
 
-	q.unschedulableQ.addOrUpdate(&highPod)
-	q.unschedulableQ.addOrUpdate(&midPod)
+	addOrUpdateUnschedulablePod(q, &highPod)
+	addOrUpdateUnschedulablePod(q, &midPod)
 
 	// Update pod condition to highPod.
 	podutil.UpdatePodCondition(&highPod.Status, &v1.PodCondition{
@@ -1205,8 +1205,8 @@ func TestEClassPriorityQueue_AddIfNotPresent(t *testing.T) {
 	q := NewPriorityQueue(nil)
 	defer clean(q)
 
-	q.unschedulableQ.addOrUpdate(&highPriNominatedPod1)
-	q.unschedulableQ.addOrUpdate(&highPriNominatedPod2)
+	addOrUpdateUnschedulablePod(q, &highPriNominatedPod1)
+	addOrUpdateUnschedulablePod(q, &highPriNominatedPod2)
 
 	q.AddIfNotPresent(&highPriNominatedPod1) // Must not add anything.
 	q.AddIfNotPresent(&medPriorityPod1)
@@ -1254,7 +1254,7 @@ func TestEClassPriorityQueue_AddIfNotPresent(t *testing.T) {
 			"to be still present in nomindatePods: %v", q.nominatedPods.nominatedPods["node1"])
 	}
 
-	p = q.unschedulableQ.get(&highPriNominatedPod1)
+	p = getUnschedulablePod(q, &highPriNominatedPod1)
 	if p != &highPriNominatedPod1 {
 		t.Errorf("Expected: %v after Pop, but got: %v", highPriNominatedPod1.Name, p.Name)
 	}
@@ -1309,7 +1309,7 @@ func TestEClassPriorityQueue_AddUnschedulableIfNotPresent(t *testing.T) {
 		t.Errorf("Expected: %v after Pop, but got: %v", medPriorityPod2.Name, p.(*v1.Pod).Name)
 	}
 
-	p = q.unschedulableQ.get(&unschedulablePod1)
+	p = getUnschedulablePod(q, &unschedulablePod1)
 	podSet = q.equivalenceClassMap[equivalence.GetEquivHash(p)].PodSet
 	if p, ok := podSet.Load(unschedulablePod1.UID); !ok || p.(*v1.Pod) != &unschedulablePod1 {
 		t.Errorf("Expected: %v after Pop, but got: %v", unschedulablePod1.Name, p.(*v1.Pod).Name)
@@ -1421,8 +1421,8 @@ func TestEClassPriorityQueue_MoveAllToActiveQueue(t *testing.T) {
 	defer clean(q)
 
 	q.Add(&medPriorityPod1)
-	q.unschedulableQ.addOrUpdate(&unschedulablePod1)
-	q.unschedulableQ.addOrUpdate(&highPriorityPod1)
+	addOrUpdateUnschedulablePod(q, &unschedulablePod1)
+	addOrUpdateUnschedulablePod(q, &highPriorityPod1)
 
 	q.MoveAllToActiveQueue()
 	if q.activeQ.Len() != 3 {

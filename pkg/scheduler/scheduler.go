@@ -28,7 +28,6 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -584,22 +583,29 @@ func (sched *Scheduler) scheduleOne() {
 	}
 
 	if util.EquivalenceClassEnabled() {
-		var (
-			podSet           map[types.UID]*v1.Pod
-			equivalenceClass *equivalence.Class
-		)
-		podSet = make(map[types.UID]*v1.Pod)
-		equivalenceClass = equivalence.NewClass(pod)
+		var equivalenceClass *equivalence.Class
+		equivalenceClass, err := equivalence.GetClass(pod)
+		if err != nil {
+			klog.Errorf("Get equivalence class failed: %v/%v", pod.Namespace, pod.Name)
+			return
+		}
 		equivalenceClass.PodSet.Range(func(k, v interface{}) bool {
-			podSet[k.(types.UID)] = v.(*v1.Pod)
+			// Because Range() accesses read-only snapshots, it's possible that the previous
+			// pod's scheduling time is too long to cause data to expire, so choose
+			// to get the current data directly through Load().
+			pod, ok := equivalenceClass.PodSet.Load(k)
+			if !ok {
+				return true
+			}
+
+			// If the pod is scheduled to fail, doSchedule returns false and range stops
+			// the iteration.
+			if !sched.doSchedule(pod.(*v1.Pod)) {
+				return false
+			}
+			equivalenceClass.PodSet.Delete(pod.(*v1.Pod).UID)
 			return true
 		})
-		for uid, pod := range podSet {
-			if !sched.doSchedule(pod) {
-				return
-			}
-			equivalenceClass.PodSet.Delete(uid)
-		}
 	} else {
 		if !sched.doSchedule(pod) {
 			return

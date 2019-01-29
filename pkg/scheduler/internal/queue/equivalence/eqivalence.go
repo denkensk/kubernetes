@@ -76,6 +76,18 @@ func NewClass(pod *v1.Pod) *Class {
 	return classMap[equivHash]
 }
 
+// GetClass returns equivalence class if class exists in classMap.
+func GetClass(pod *v1.Pod) (*Class, error) {
+	equivHash := GetEquivHash(pod)
+	classMap = NewClassMap()
+
+	if _, ok := classMap[equivHash]; !ok {
+		return nil, fmt.Errorf("Get equivalence class failed: %v/%v ", pod.Namespace, pod.Name)
+	}
+
+	return classMap[equivHash], nil
+}
+
 // GetEquivHash returns the pod's UID of controllerRef.
 // NOTE (resouer): To avoid hash collision issue, in alpha stage we decide to use `controllerRef` only to determine
 // whether two pods are equivalent. This may change with the feature evolves.
@@ -85,7 +97,8 @@ func GetEquivHash(pod *v1.Pod) types.UID {
 		return ownerReferences[0].UID
 	}
 
-	return ""
+	// If pod's UID of controllerRef is nil, return pod.UID.
+	return pod.UID
 }
 
 // AddPod adds the pod in class.PodSet and returns the point to Class.

@@ -569,7 +569,7 @@ func (p *PriorityQueue) Pop() (*v1.Pod, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	if util.EquivalenceClassEnabled() {
-		// This is a dead cycle. If activeQ is not empty, Pop() gets equivalenceClass from activeQ
+		// Note: This is not expected to be an infinite loop. If activeQ is not empty, Pop() gets equivalenceClass from activeQ
 		// and returns the first pod, then ends the cycle. If activeQ is empty, Pop() waits atomically
 		// unlocks p.lock, suspends execution of the calling goroutine until new item is enqueued and
 		// will not result in deadlock problem. When Close() is called, the p.closed is set and the condition
