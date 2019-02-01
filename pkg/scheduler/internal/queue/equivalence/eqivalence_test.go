@@ -231,11 +231,12 @@ func TestGetEquivalenceHash(t *testing.T) {
 		targetHash    types.UID
 	)
 
+	classMap := NewClassMap()
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			for i, podInfo := range test.podInfoList {
 				testPod := podInfo.pod
-				eclassInfo := NewClass(testPod)
+				eclassInfo := classMap.EquivClass(testPod)
 				if eclassInfo == nil && podInfo.hashIsValid {
 					t.Errorf("Failed: pod %v is expected to have valid hash", testPod)
 				}
