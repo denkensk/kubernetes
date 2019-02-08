@@ -57,6 +57,7 @@ import (
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
 	cachedebugger "k8s.io/kubernetes/pkg/scheduler/internal/cache/debugger"
 	internalqueue "k8s.io/kubernetes/pkg/scheduler/internal/queue"
+	"k8s.io/kubernetes/pkg/scheduler/internal/queue/equivalence"
 	"k8s.io/kubernetes/pkg/scheduler/plugins"
 	pluginsv1alpha1 "k8s.io/kubernetes/pkg/scheduler/plugins/v1alpha1"
 	"k8s.io/kubernetes/pkg/scheduler/util"
@@ -93,6 +94,9 @@ type Config struct {
 	// It is expected that changes made via SchedulerCache will be observed
 	// by NodeLister and Algorithm.
 	SchedulerCache schedulerinternalcache.Cache
+
+	// EquivalenceClass is the pointer to equivalence.EquivClass.
+	EquivalenceClass *equivalence.EquivClass
 
 	NodeLister algorithm.NodeLister
 	Algorithm  core.ScheduleAlgorithm
@@ -221,6 +225,10 @@ type configFactory struct {
 	// Always check all predicates even if the middle of one predicate fails.
 	alwaysCheckAllPredicates bool
 
+	// Enable equivalence class
+	enableEquivalenceClass bool
+	equivClass             *equivalence.EquivClass
+
 	// Disable pod preemption or not.
 	disablePreemption bool
 
@@ -244,6 +252,7 @@ type ConfigFactoryArgs struct {
 	StorageClassInformer           storageinformers.StorageClassInformer
 	HardPodAffinitySymmetricWeight int32
 	DisablePreemption              bool
+	EnableEquivalenceClass         bool
 	PercentageOfNodesToScore       int32
 	BindTimeoutSeconds             int64
 	StopCh                         <-chan struct{}
@@ -280,6 +289,7 @@ func NewConfigFactory(args *ConfigFactoryArgs) Configurator {
 		StopEverything:                 stopEverything,
 		schedulerName:                  args.SchedulerName,
 		hardPodAffinitySymmetricWeight: args.HardPodAffinitySymmetricWeight,
+		enableEquivalenceClass:         args.EnableEquivalenceClass,
 		disablePreemption:              args.DisablePreemption,
 		percentageOfNodesToScore:       args.PercentageOfNodesToScore,
 	}
@@ -574,6 +584,11 @@ func (c *configFactory) updatePodInSchedulingQueue(oldObj, newObj interface{}) {
 	if err := c.podQueue.Update(oldObj.(*v1.Pod), pod); err != nil {
 		runtime.HandleError(fmt.Errorf("unable to update %T: %v", newObj, err))
 	}
+	oldPod := oldObj.(*v1.Pod)
+	equivHash := equivalence.GetEquivHash(oldPod)
+	if flagPodUID, ok := c.equivClass.Get(equivHash); ok && flagPodUID == oldPod.UID {
+		c.equivClass.Delete(equivHash)
+	}
 }
 
 func (c *configFactory) deletePodFromSchedulingQueue(obj interface{}) {
@@ -594,6 +609,10 @@ func (c *configFactory) deletePodFromSchedulingQueue(obj interface{}) {
 	}
 	if err := c.podQueue.Delete(pod); err != nil {
 		runtime.HandleError(fmt.Errorf("unable to dequeue %T: %v", obj, err))
+	}
+	equivHash := equivalence.GetEquivHash(pod)
+	if flagPodUID, ok := c.equivClass.Get(equivHash); ok && flagPodUID == pod.UID {
+		c.equivClass.Delete(equivHash)
 	}
 	if c.volumeBinder != nil {
 		// Volume binder only wants to keep unassigned pods
@@ -851,8 +870,15 @@ func (c *configFactory) CreateFromKeys(predicateKeys, priorityKeys sets.String, 
 	// TODO(bsalamat): the default registrar should be able to process config files.
 	c.pluginSet = plugins.NewDefaultPluginSet(pluginsv1alpha1.NewPluginContext(), &c.schedulerCache)
 
+	// Init equivalence class cache
+	if c.enableEquivalenceClass {
+		c.equivClass = equivalence.New()
+		klog.Info("Created equivalence class")
+	}
+
 	algo := core.NewGenericScheduler(
 		c.schedulerCache,
+		c.equivClass,
 		c.podQueue,
 		predicateFuncs,
 		predicateMetaProducer,
@@ -870,7 +896,8 @@ func (c *configFactory) CreateFromKeys(predicateKeys, priorityKeys sets.String, 
 
 	podBackoff := util.CreateDefaultPodBackoff()
 	return &Config{
-		SchedulerCache: c.schedulerCache,
+		SchedulerCache:   c.schedulerCache,
+		EquivalenceClass: c.equivClass,
 		// The scheduler only needs to consider schedulable nodes.
 		NodeLister:          &nodeLister{c.nodeLister},
 		Algorithm:           algo,

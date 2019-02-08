@@ -28,6 +28,7 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/wait"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -41,6 +42,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/core"
 	"k8s.io/kubernetes/pkg/scheduler/factory"
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
+	"k8s.io/kubernetes/pkg/scheduler/internal/queue/equivalence"
 	"k8s.io/kubernetes/pkg/scheduler/metrics"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
@@ -69,6 +71,7 @@ type schedulerOptions struct {
 	disablePreemption              bool
 	percentageOfNodesToScore       int32
 	bindTimeoutSeconds             int64
+	enableEquivalenceClass         bool
 }
 
 // Option configures a Scheduler
@@ -109,12 +112,20 @@ func WithBindTimeoutSeconds(bindTimeoutSeconds int64) Option {
 	}
 }
 
+// WithEquivalenceClassEnabled sets enableEquivalenceClass for Scheduler, the default value is false
+func WithEquivalenceClassEnabled(enableEquivalenceClass bool) Option {
+	return func(o *schedulerOptions) {
+		o.enableEquivalenceClass = enableEquivalenceClass
+	}
+}
+
 var defaultSchedulerOptions = schedulerOptions{
 	schedulerName:                  v1.DefaultSchedulerName,
 	hardPodAffinitySymmetricWeight: v1.DefaultHardPodAffinitySymmetricWeight,
 	disablePreemption:              false,
 	percentageOfNodesToScore:       schedulerapi.DefaultPercentageOfNodesToScore,
 	bindTimeoutSeconds:             BindTimeoutSeconds,
+	enableEquivalenceClass:         false,
 }
 
 // New returns a Scheduler
@@ -154,6 +165,7 @@ func New(client clientset.Interface,
 		PdbInformer:                    pdbInformer,
 		StorageClassInformer:           storageClassInformer,
 		HardPodAffinitySymmetricWeight: options.hardPodAffinitySymmetricWeight,
+		EnableEquivalenceClass:         options.enableEquivalenceClass,
 		DisablePreemption:              options.disablePreemption,
 		PercentageOfNodesToScore:       options.percentageOfNodesToScore,
 		BindTimeoutSeconds:             options.bindTimeoutSeconds,
@@ -448,6 +460,24 @@ func (sched *Scheduler) scheduleOne() {
 		return
 	}
 
+	var equivHash types.UID
+
+	// flagPod is the first failed Pod. When the flagPod has failed to schedule,
+	// its hash and UUID will be cached, and the scheduler will reject all other
+	// coming Pods with the same hash.
+	if sched.config.EquivalenceClass != nil {
+		equivHash = equivalence.GetEquivHash(pod)
+		if flagPodUID, ok := sched.config.EquivalenceClass.Get(equivHash); ok {
+			if flagPodUID != pod.UID {
+				return
+			} else {
+				// The flagPod become scheduled again, scheduler should not direcly reject
+				// the flagPod (matched by UUID) even though its hash is present in `EquivalenceClass`.
+				sched.config.EquivalenceClass.Delete(equivHash)
+			}
+		}
+	}
+
 	klog.V(3).Infof("Attempting to schedule pod: %v/%v", pod.Namespace, pod.Name)
 
 	// Synchronously attempt to find a fit for the pod.
@@ -469,6 +499,9 @@ func (sched *Scheduler) scheduleOne() {
 				metrics.SchedulingAlgorithmPremptionEvaluationDuration.Observe(metrics.SinceInSeconds(preemptionStartTime))
 				metrics.DeprecatedSchedulingAlgorithmPremptionEvaluationDuration.Observe(metrics.SinceInMicroseconds(preemptionStartTime))
 				metrics.SchedulingLatency.WithLabelValues(metrics.PreemptionEvaluation).Observe(metrics.SinceInSeconds(preemptionStartTime))
+			}
+			if sched.config.EquivalenceClass == nil {
+				sched.config.EquivalenceClass.Add(equivHash, pod.UID)
 			}
 			// Pod did not fit anywhere, so it is counted as a failure. If preemption
 			// succeeds, the pod should get counted as a success the next time we try to
