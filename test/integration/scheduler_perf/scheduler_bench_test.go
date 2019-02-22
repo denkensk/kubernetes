@@ -223,7 +223,7 @@ func benchmarkScheduling(numNodes, numExistingPods, minPods int,
 	b *testing.B) {
 	// set EnableEquivalenceClass false
 	defer utilfeaturetesting.SetFeatureGateDuringTest(nil, utilfeature.DefaultFeatureGate,
-		features.EquivalenceClass, true)()
+		features.EquivalenceClass, false)()
 
 	if b.N < minPods {
 		b.N = minPods
