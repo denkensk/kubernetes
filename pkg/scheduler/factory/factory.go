@@ -57,6 +57,7 @@ import (
 	schedulerinternalcache "k8s.io/kubernetes/pkg/scheduler/internal/cache"
 	cachedebugger "k8s.io/kubernetes/pkg/scheduler/internal/cache/debugger"
 	internalqueue "k8s.io/kubernetes/pkg/scheduler/internal/queue"
+	"k8s.io/kubernetes/pkg/scheduler/internal/queue/equivalence"
 	"k8s.io/kubernetes/pkg/scheduler/plugins"
 	pluginsv1alpha1 "k8s.io/kubernetes/pkg/scheduler/plugins/v1alpha1"
 	"k8s.io/kubernetes/pkg/scheduler/util"
@@ -93,6 +94,9 @@ type Config struct {
 	// It is expected that changes made via SchedulerCache will be observed
 	// by NodeLister and Algorithm.
 	SchedulerCache schedulerinternalcache.Cache
+
+	// EquivalenceClass is the pointer to equivalence.EquivClass.
+	EquivalenceClass *equivalence.EquivClass
 
 	NodeLister algorithm.NodeLister
 	Algorithm  core.ScheduleAlgorithm
@@ -221,6 +225,8 @@ type configFactory struct {
 	// Always check all predicates even if the middle of one predicate fails.
 	alwaysCheckAllPredicates bool
 
+	equivClass *equivalence.EquivClass
+
 	// Disable pod preemption or not.
 	disablePreemption bool
 
@@ -244,6 +250,7 @@ type ConfigFactoryArgs struct {
 	StorageClassInformer           storageinformers.StorageClassInformer
 	HardPodAffinitySymmetricWeight int32
 	DisablePreemption              bool
+	EnableEquivalenceClass         bool
 	PercentageOfNodesToScore       int32
 	BindTimeoutSeconds             int64
 	StopCh                         <-chan struct{}
@@ -258,6 +265,13 @@ func NewConfigFactory(args *ConfigFactoryArgs) Configurator {
 	}
 	schedulerCache := schedulerinternalcache.New(30*time.Second, stopEverything)
 
+	var equivClass *equivalence.EquivClass
+	// Init equivalence class cache
+	if args.EnableEquivalenceClass {
+		equivClass = equivalence.New()
+		klog.Info("Created equivalence class")
+	}
+
 	// storageClassInformer is only enabled through VolumeScheduling feature gate
 	var storageClassLister storagelisters.StorageClassLister
 	if args.StorageClassInformer != nil {
@@ -266,7 +280,7 @@ func NewConfigFactory(args *ConfigFactoryArgs) Configurator {
 	c := &configFactory{
 		client:                         args.Client,
 		podLister:                      schedulerCache,
-		podQueue:                       internalqueue.NewSchedulingQueue(stopEverything),
+		podQueue:                       internalqueue.NewSchedulingQueue(equivClass, stopEverything),
 		nodeLister:                     args.NodeInformer.Lister(),
 		pVLister:                       args.PvInformer.Lister(),
 		pVCLister:                      args.PvcInformer.Lister(),
@@ -280,6 +294,7 @@ func NewConfigFactory(args *ConfigFactoryArgs) Configurator {
 		StopEverything:                 stopEverything,
 		schedulerName:                  args.SchedulerName,
 		hardPodAffinitySymmetricWeight: args.HardPodAffinitySymmetricWeight,
+		equivClass:                     equivClass,
 		disablePreemption:              args.DisablePreemption,
 		percentageOfNodesToScore:       args.PercentageOfNodesToScore,
 	}
@@ -655,6 +670,7 @@ func (c *configFactory) updateNodeInCache(oldObj, newObj interface{}) {
 		klog.Errorf("scheduler cache UpdateNode failed: %v", err)
 	}
 
+	klog.Errorf("**************** node update")
 	// Only activate unschedulable pods if the node became more schedulable.
 	// We skip the node property comparison when there is no unschedulable pods in the queue
 	// to save processing cycles. We still trigger a move to active queue to cover the case
@@ -853,6 +869,7 @@ func (c *configFactory) CreateFromKeys(predicateKeys, priorityKeys sets.String, 
 
 	algo := core.NewGenericScheduler(
 		c.schedulerCache,
+		c.equivClass,
 		c.podQueue,
 		predicateFuncs,
 		predicateMetaProducer,
@@ -870,7 +887,8 @@ func (c *configFactory) CreateFromKeys(predicateKeys, priorityKeys sets.String, 
 
 	podBackoff := util.CreateDefaultPodBackoff()
 	return &Config{
-		SchedulerCache: c.schedulerCache,
+		SchedulerCache:   c.schedulerCache,
+		EquivalenceClass: c.equivClass,
 		// The scheduler only needs to consider schedulable nodes.
 		NodeLister:          &nodeLister{c.nodeLister},
 		Algorithm:           algo,

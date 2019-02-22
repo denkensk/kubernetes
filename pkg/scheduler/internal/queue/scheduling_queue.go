@@ -42,6 +42,7 @@ import (
 	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 	"k8s.io/kubernetes/pkg/scheduler/algorithm/predicates"
 	priorityutil "k8s.io/kubernetes/pkg/scheduler/algorithm/priorities/util"
+	"k8s.io/kubernetes/pkg/scheduler/internal/queue/equivalence"
 	"k8s.io/kubernetes/pkg/scheduler/util"
 )
 
@@ -91,9 +92,9 @@ type SchedulingQueue interface {
 
 // NewSchedulingQueue initializes a new scheduling queue. If pod priority is
 // enabled a priority queue is returned. If it is disabled, a FIFO is returned.
-func NewSchedulingQueue(stop <-chan struct{}) SchedulingQueue {
+func NewSchedulingQueue(equivClass *equivalence.EquivClass, stop <-chan struct{}) SchedulingQueue {
 	if util.PodPriorityEnabled() {
-		return NewPriorityQueue(stop)
+		return NewPriorityQueue(equivClass, stop)
 	}
 	return NewFIFO()
 }
@@ -238,6 +239,8 @@ type PriorityQueue struct {
 	// cycle will be put back to activeQueue if we were trying to schedule them
 	// when we received move request.
 	moveRequestCycle int64
+	// equivClass is the pointer to equivalence.EquivClass.
+	equivClass *equivalence.EquivClass
 
 	// closed indicates that the queue is closed.
 	// It is mainly used to let Pop() exit its control loop while waiting for an item.
@@ -272,12 +275,12 @@ func activeQComp(pod1, pod2 interface{}) bool {
 }
 
 // NewPriorityQueue creates a PriorityQueue object.
-func NewPriorityQueue(stop <-chan struct{}) *PriorityQueue {
-	return NewPriorityQueueWithClock(stop, util.RealClock{})
+func NewPriorityQueue(equivClass *equivalence.EquivClass, stop <-chan struct{}) *PriorityQueue {
+	return NewPriorityQueueWithClock(equivClass, stop, util.RealClock{})
 }
 
 // NewPriorityQueueWithClock creates a PriorityQueue which uses the passed clock for time.
-func NewPriorityQueueWithClock(stop <-chan struct{}, clock util.Clock) *PriorityQueue {
+func NewPriorityQueueWithClock(equivClass *equivalence.EquivClass, stop <-chan struct{}, clock util.Clock) *PriorityQueue {
 	pq := &PriorityQueue{
 		clock:            clock,
 		stop:             stop,
@@ -286,6 +289,7 @@ func NewPriorityQueueWithClock(stop <-chan struct{}, clock util.Clock) *Priority
 		unschedulableQ:   newUnschedulablePodsMap(),
 		nominatedPods:    newNominatedPodMap(),
 		moveRequestCycle: -1,
+		equivClass:       equivClass,
 	}
 	pq.cond.L = &pq.lock
 	pq.podBackoffQ = util.NewHeap(cache.MetaNamespaceKeyFunc, pq.podsCompareBackoffCompleted)
@@ -402,6 +406,8 @@ func (p *PriorityQueue) SchedulingCycle() int64 {
 func (p *PriorityQueue) AddUnschedulableIfNotPresent(pod *v1.Pod, podSchedulingCycle int64) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	klog.Errorf("******** AddUnschedulableIfNotPresent 1")
 	if p.unschedulableQ.get(pod) != nil {
 		return fmt.Errorf("pod is already present in unschedulableQ")
 	}
@@ -562,6 +568,9 @@ func (p *PriorityQueue) Update(oldPod, newPod *v1.Pod) error {
 			// If the pod is updated reset backoff
 			p.clearPodBackoff(newPod)
 			p.unschedulableQ.delete(usPod)
+			if p.equivClass != nil {
+				p.equivClass.Delete(equivalence.GetEquivHash(newPod))
+			}
 			err := p.activeQ.Add(newPod)
 			if err == nil {
 				p.cond.Broadcast()
@@ -619,18 +628,27 @@ func (p *PriorityQueue) AssignedPodUpdated(pod *v1.Pod) {
 func (p *PriorityQueue) MoveAllToActiveQueue() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+	klog.Errorf("MoveAllToActiveQueue***** 1")
 	for _, pod := range p.unschedulableQ.pods {
 		if p.isPodBackingOff(pod) {
+			klog.Errorf("backoff***** 1")
 			if err := p.podBackoffQ.Add(pod); err != nil {
 				klog.Errorf("Error adding pod %v to the backoff queue: %v", pod.Name, err)
 			}
 		} else {
+			klog.Errorf("active***** 1")
 			if err := p.activeQ.Add(pod); err != nil {
 				klog.Errorf("Error adding pod %v to the scheduling queue: %v", pod.Name, err)
 			}
 		}
 	}
+
+	klog.Errorf("MoveAllToActiveQueue***** 2")
 	p.unschedulableQ.clear()
+	if p.equivClass != nil {
+		klog.Errorf("MoveAllToActiveQueue***** 3")
+		p.equivClass.Clear()
+	}
 	p.moveRequestCycle = p.schedulingCycle
 	p.cond.Broadcast()
 }
@@ -648,6 +666,9 @@ func (p *PriorityQueue) movePodsToActiveQueue(pods []*v1.Pod) {
 			}
 		}
 		p.unschedulableQ.delete(pod)
+		if p.equivClass != nil {
+			p.equivClass.Delete(equivalence.GetEquivHash(pod))
+		}
 	}
 	p.moveRequestCycle = p.schedulingCycle
 	p.cond.Broadcast()
