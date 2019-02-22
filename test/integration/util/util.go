@@ -121,6 +121,7 @@ func createSchedulerConfigurator(
 		PdbInformer:                    informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
 		StorageClassInformer:           informerFactory.Storage().V1().StorageClasses(),
 		HardPodAffinitySymmetricWeight: v1.DefaultHardPodAffinitySymmetricWeight,
+		EnableEquivalenceClass:         true,
 		DisablePreemption:              false,
 		PercentageOfNodesToScore:       schedulerapi.DefaultPercentageOfNodesToScore,
 		StopCh:                         stopCh,
