@@ -24,6 +24,9 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	utilfeaturetesting "k8s.io/apiserver/pkg/util/feature/testing"
+	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/test/integration/framework"
 	testutils "k8s.io/kubernetes/test/utils"
 
@@ -217,6 +220,10 @@ func benchmarkScheduling(numNodes, numExistingPods, minPods int,
 	nodeStrategy testutils.PrepareNodeStrategy,
 	setupPodStrategy, testPodStrategy testutils.TestPodCreateStrategy,
 	b *testing.B) {
+	// set EnableEquivalenceClass false
+	defer utilfeaturetesting.SetFeatureGateDuringTest(nil, utilfeature.DefaultFeatureGate,
+		features.EquivalenceClass, true)()
+
 	if b.N < minPods {
 		b.N = minPods
 	}
