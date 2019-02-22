@@ -467,7 +467,7 @@ func (sched *Scheduler) scheduleOne() {
 	// its hash and UUID will be cached, and the scheduler will reject all other
 	// coming Pods with the same hash.
 	if sched.config.EquivalenceClass != nil {
-		klog.Infof("************true********\n")
+		klog.Infof("-------------true------------\n")
 		equivHash := equivalence.GetEquivHash(pod)
 		if ok := sched.config.EquivalenceClass.Get(equivHash); ok {
 			sched.recordSchedulingFailure(pod, SkipScheduleBYEquivalenceClass, v1.PodReasonUnschedulable, SkipScheduleBYEquivalenceClass.Error())
