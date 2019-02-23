@@ -415,7 +415,7 @@ func getTPMapMatchingExistingAntiAffinity(pod *v1.Pod, nodeInfoMap map[string]*s
 			appendTopologyPairsMaps(existingPodTopologyMaps)
 		}
 	}
-	workqueue.ParallelizeUntil(context.TODO(), 36, len(allNodeNames), processNode)
+	workqueue.ParallelizeUntil(context.TODO(), 32, len(allNodeNames), processNode)
 	return topologyMaps, firstError
 }
 
@@ -503,7 +503,7 @@ func getTPMapMatchingIncomingAffinityAntiAffinity(pod *v1.Pod, nodeInfoMap map[s
 			appendResult(node.Name, nodeTopologyPairsAffinityPodsMaps, nodeTopologyPairsAntiAffinityPodsMaps)
 		}
 	}
-	workqueue.ParallelizeUntil(context.TODO(), 36, len(allNodeNames), processNode)
+	workqueue.ParallelizeUntil(context.TODO(), 32, len(allNodeNames), processNode)
 	return topologyPairsAffinityPodsMaps, topologyPairsAntiAffinityPodsMaps, firstError
 }
 

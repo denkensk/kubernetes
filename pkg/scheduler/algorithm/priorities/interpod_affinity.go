@@ -211,7 +211,7 @@ func (ipa *InterPodAffinity) CalculateInterPodAffinityPriority(pod *v1.Pod, node
 			}
 		}
 	}
-	workqueue.ParallelizeUntil(context.TODO(), 36, len(allNodeNames), processNode)
+	workqueue.ParallelizeUntil(context.TODO(), 32, len(allNodeNames), processNode)
 	if pm.firstError != nil {
 		return nil, pm.firstError
 	}
