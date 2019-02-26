@@ -479,6 +479,7 @@ func TestGenericScheduler(t *testing.T) {
 				nil,
 				pvcLister,
 				schedulertesting.FakePDBLister{},
+				schedulertesting.FakePriorityClassLister{},
 				test.alwaysCheckAllPredicates,
 				false,
 				schedulerapi.DefaultPercentageOfNodesToScore)
@@ -511,7 +512,7 @@ func makeScheduler(predicates map[string]algorithmpredicates.FitPredicate, nodes
 		prioritizers,
 		priorities.EmptyPriorityMetadataProducer,
 		emptyPluginSet,
-		nil, nil, nil, nil, false, false,
+		nil, nil, nil, nil, nil, false, false,
 		schedulerapi.DefaultPercentageOfNodesToScore)
 	cache.UpdateNodeInfoSnapshot(&s.(*genericScheduler).nodeInfoSnapshot)
 	return s.(*genericScheduler)
@@ -1441,6 +1442,7 @@ func TestPreempt(t *testing.T) {
 				nil,
 				schedulertesting.FakePersistentVolumeClaimLister{},
 				schedulertesting.FakePDBLister{},
+				schedulertesting.FakePriorityClassLister{},
 				false,
 				false,
 				schedulerapi.DefaultPercentageOfNodesToScore)
@@ -1529,6 +1531,7 @@ func TestNumFeasibleNodesToFind(t *testing.T) {
 			wantNumNodes:             2400,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := &genericScheduler{
