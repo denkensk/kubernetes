@@ -291,11 +291,11 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if !ok || fitError == nil {
 		return nil, nil, nil, nil
 	}
-    
-    if !podEligibleToPreemptOthers(pod, g.nodeInfoSnapshot.NodeInfoMap) {
-        klog.V(5).Infof("Pod %v/%v is not eligible for more preemption.", pod.Namespace, pod.Name)
-        return nil, nil, nil, nil
-    }
+
+	if !podEligibleToPreemptOthers(pod, g.nodeInfoSnapshot.NodeInfoMap) {
+		klog.V(5).Infof("Pod %v/%v is not eligible for more preemption.", pod.Namespace, pod.Name)
+		return nil, nil, nil, nil
+	}
 
 	if podHasNonPreempting(pod, g.priorityClassLister) {
 		klog.V(5).Infof("Pod %v/%v with this PriorityClass could not trigger a preemption process.", pod.Namespace, pod.Name)
