@@ -324,7 +324,7 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
+	klog.V(3).Infof("selectNodesForPreemption %v", nodeToVictims)
 	// We will only check nodeToVictims with extenders that support preemption.
 	// Extenders which do not support preemption may later prevent preemptor from being scheduled on the nominated
 	// node. In that case, scheduler will find a different host for the preemptor in subsequent scheduling cycles.
@@ -332,12 +332,12 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
+	klog.V(3).Infof("processPreemptionWithExtenders %v", nodeToVictims)
 	candidateNode := pickOneNodeForPreemption(nodeToVictims)
 	if candidateNode == nil {
 		return nil, nil, nil, nil
 	}
-
+	klog.V(3).Infof("pickOneNodeForPreemption %v", candidateNode)
 	// Lower priority pods nominated to run on this node, may no longer fit on
 	// this node. So, we should remove their nomination. Removing their
 	// nomination updates these pods and moves them to the active queue. It
@@ -346,7 +346,7 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if nodeInfo, ok := g.nodeInfoSnapshot.NodeInfoMap[candidateNode.Name]; ok {
 		return nodeInfo.Node(), nodeToVictims[candidateNode].Pods, nominatedPods, nil
 	}
-
+	klog.V(3).Infof("getLowerPriorityNominatedPods %v", nominatedPods)
 	return nil, nil, nil, fmt.Errorf(
 		"preemption failed: the target node %s has been deleted from scheduler cache",
 		candidateNode.Name)
