@@ -621,10 +621,18 @@ func podFitsOnNode(
 			if predicate, exist := predicateFuncs[predicateKey]; exist {
 				fit, reasons, err = predicate(pod, metaToUse, nodeInfoToUse)
 				if err != nil {
+					klog.V(3).Infof("fit %v", fit)
+					klog.V(3).Infof("reasons %v", reasons)
+					klog.V(3).Infof("err %v", err)
+					klog.V(3).Infof("predicateKey %v", predicateKey)
 					return false, []predicates.PredicateFailureReason{}, err
 				}
 
 				if !fit {
+					klog.V(3).Infof("fit %v", fit)
+					klog.V(3).Infof("reasons %v", reasons)
+					klog.V(3).Infof("err %v", err)
+					klog.V(3).Infof("predicateKey %v", predicateKey)
 					// eCache is available and valid, and predicates result is unfit, record the fail reasons
 					failedPredicates = append(failedPredicates, reasons...)
 					// if alwaysCheckAllPredicates is false, short circuit all predicates when one predicate fails.
