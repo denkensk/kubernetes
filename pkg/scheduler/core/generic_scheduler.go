@@ -1050,7 +1050,7 @@ func selectVictimsOnNode(
 	podPriority := util.GetPodPriority(pod)
 	klog.V(3).Infof("podPriority %v", podPriority)
 	for _, p := range nodeInfoCopy.Pods() {
-		klog.V(3).Infof("util.GetPodPriority(p %v", util.GetPodPriority(p))
+		klog.V(3).Infof("util.GetPodPriority %v", util.GetPodPriority(p))
 		if util.GetPodPriority(p) < podPriority {
 			potentialVictims.Items = append(potentialVictims.Items, p)
 			removePod(p)

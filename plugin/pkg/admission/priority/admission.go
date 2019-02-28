@@ -30,6 +30,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	schedulingv1beta1listers "k8s.io/client-go/listers/scheduling/v1beta1"
+	"k8s.io/klog"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/apis/scheduling"
 	"k8s.io/kubernetes/pkg/features"
@@ -195,13 +196,17 @@ func (p *priorityPlugin) admitPod(a admission.Attributes) error {
 			}
 			pod.Spec.PriorityClassName = pcName
 		} else {
+			klog.V(1).Infof("start----\n")
 			pcName := pod.Spec.PriorityClassName
+			klog.V(1).Infof("pcName %v", pcName)
 			if !priorityClassPermittedInNamespace(pcName, a.GetNamespace()) {
+				klog.V(1).Infof("priorityClassPermittedInNamespace %v", a.GetNamespace())
 				return admission.NewForbidden(a, fmt.Errorf("pods with %v priorityClass is not permitted in %v namespace", pcName, a.GetNamespace()))
 			}
 
 			// Try resolving the priority class name.
 			pc, err := p.lister.Get(pod.Spec.PriorityClassName)
+			klog.V(1).Infof("pc %v", pc)
 			if err != nil {
 				if errors.IsNotFound(err) {
 					return admission.NewForbidden(a, fmt.Errorf("no PriorityClass with name %v was found", pod.Spec.PriorityClassName))
@@ -209,14 +214,15 @@ func (p *priorityPlugin) admitPod(a admission.Attributes) error {
 
 				return fmt.Errorf("failed to get PriorityClass with name %s: %v", pod.Spec.PriorityClassName, err)
 			}
-
 			priority = pc.Value
+			klog.V(1).Infof("priority %v", priority)
 		}
 		// if the pod contained a priority that differs from the one computed from the priority class, error
 		if pod.Spec.Priority != nil && *pod.Spec.Priority != priority {
 			return admission.NewForbidden(a, fmt.Errorf("the integer value of priority (%d) must not be provided in pod spec; priority admission controller computed %d from the given PriorityClass name", *pod.Spec.Priority, priority))
 		}
 		pod.Spec.Priority = &priority
+		klog.V(1).Infof("pod.Spec.Priority %v", pod.Spec.Priority)
 	}
 	return nil
 }
