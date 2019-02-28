@@ -949,6 +949,7 @@ func selectNodesForPreemption(pod *v1.Pod,
 		}
 		pods, numPDBViolations, fits := selectVictimsOnNode(pod, metaCopy, nodeNameToInfo[nodeName], fitPredicates, queue, pdbs)
 		klog.V(3).Infof("fits %v", fits)
+		klog.V(3).Infof("pods %v", pods)
 		if fits {
 			resultLock.Lock()
 			victims := schedulerapi.Victims{
@@ -1032,6 +1033,7 @@ func selectVictimsOnNode(
 	nodeInfoCopy := nodeInfo.Clone()
 
 	removePod := func(rp *v1.Pod) {
+		klog.V(3).Infof("removePod")
 		nodeInfoCopy.RemovePod(rp)
 		if meta != nil {
 			meta.RemovePod(rp)
@@ -1046,10 +1048,10 @@ func selectVictimsOnNode(
 	// As the first step, remove all the lower priority pods from the node and
 	// check if the given pod can be scheduled.
 	podPriority := util.GetPodPriority(pod)
+	klog.V(3).Infof("podPriority %v", podPriority)
 	for _, p := range nodeInfoCopy.Pods() {
+		klog.V(3).Infof("util.GetPodPriority(p %v", util.GetPodPriority(p))
 		if util.GetPodPriority(p) < podPriority {
-			klog.V(3).Infof("podPriority %v", podPriority)
-			klog.V(3).Infof("util.GetPodPriority(p %v", util.GetPodPriority(p))
 			potentialVictims.Items = append(potentialVictims.Items, p)
 			removePod(p)
 		}
