@@ -525,7 +525,7 @@ func (n *NodeInfo) RemovePod(pod *v1.Pod) error {
 	if err != nil {
 		return err
 	}
-
+	klog.V(3).Infof("k1 %v", k1)
 	for i := range n.podsWithAffinity {
 		k2, err := GetPodKey(n.podsWithAffinity[i])
 		if err != nil {
@@ -551,8 +551,9 @@ func (n *NodeInfo) RemovePod(pod *v1.Pod) error {
 			n.pods = n.pods[:len(n.pods)-1]
 			// reduce the resource data
 			res, non0CPU, non0Mem := calculateResource(pod)
-
+			klog.V(3).Infof("n.requestedResource.MilliCPU %v", n.requestedResource.MilliCPU)
 			n.requestedResource.MilliCPU -= res.MilliCPU
+			klog.V(3).Infof("n.requestedResource.MilliCPU %v", n.requestedResource.MilliCPU)
 			n.requestedResource.Memory -= res.Memory
 			n.requestedResource.EphemeralStorage -= res.EphemeralStorage
 			if len(res.ScalarResources) > 0 && n.requestedResource.ScalarResources == nil {
