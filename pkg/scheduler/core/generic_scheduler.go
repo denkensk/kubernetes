@@ -1053,6 +1053,7 @@ func selectVictimsOnNode(
 	// support this case for performance reasons. Having affinity to lower
 	// priority pods is not a recommended configuration anyway.
 	if fits, _, err := podFitsOnNode(pod, meta, nodeInfoCopy, fitPredicates, queue, false); !fits {
+		klog.V(3).Infof("fits %v", fits)
 		if err != nil {
 			klog.Warningf("Encountered error while selecting victims on node %v: %v", nodeInfo.Node().Name, err)
 		}
@@ -1067,6 +1068,7 @@ func selectVictimsOnNode(
 	reprievePod := func(p *v1.Pod) bool {
 		addPod(p)
 		fits, _, _ := podFitsOnNode(pod, meta, nodeInfoCopy, fitPredicates, queue, false)
+		klog.V(3).Infof("fits %v", fits)
 		if !fits {
 			removePod(p)
 			victims = append(victims, p)
@@ -1074,15 +1076,18 @@ func selectVictimsOnNode(
 		}
 		return fits
 	}
+	klog.V(3).Infof("debug %v", 1)
 	for _, p := range violatingVictims {
 		if !reprievePod(p) {
 			numViolatingVictim++
 		}
 	}
+	klog.V(3).Infof("debug %v", 2)
 	// Now we try to reprieve non-violating victims.
 	for _, p := range nonViolatingVictims {
 		reprievePod(p)
 	}
+	klog.V(3).Infof("debug %v", 3)
 	return victims, numViolatingVictim, true
 }
 
