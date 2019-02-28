@@ -934,11 +934,13 @@ func selectNodesForPreemption(pod *v1.Pod,
 	meta := metadataProducer(pod, nodeNameToInfo)
 	checkNode := func(i int) {
 		nodeName := potentialNodes[i].Name
+		klog.V(3).Infof("nodeName %v", nodeName)
 		var metaCopy predicates.PredicateMetadata
 		if meta != nil {
 			metaCopy = meta.ShallowCopy()
 		}
 		pods, numPDBViolations, fits := selectVictimsOnNode(pod, metaCopy, nodeNameToInfo[nodeName], fitPredicates, queue, pdbs)
+		klog.V(3).Infof("fits %v", fits)
 		if fits {
 			resultLock.Lock()
 			victims := schedulerapi.Victims{
@@ -1043,6 +1045,7 @@ func selectVictimsOnNode(
 		}
 	}
 	potentialVictims.Sort()
+	klog.V(3).Infof("potentialVictims %v", potentialVictims)
 	// If the new pod does not fit after removing all the lower priority pods,
 	// we are almost done and this node is not suitable for preemption. The only
 	// condition that we could check is if the "pod" is failing to schedule due to
