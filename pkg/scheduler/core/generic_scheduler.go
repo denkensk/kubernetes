@@ -298,7 +298,7 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	}
 
 	if podHasNonPreempting(pod, g.priorityClassLister) {
-		klog.V(5).Infof("Pod %v/%v with this PriorityClass could not trigger a preemption process.", pod.Namespace, pod.Name)
+		klog.V(5).Infof("Pod %v/%v with this NonPreempting PriorityClass could not start a preemption process.", pod.Namespace, pod.Name)
 		return nil, nil, nil, nil
 	}
 

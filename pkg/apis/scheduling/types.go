@@ -65,8 +65,8 @@ type PriorityClass struct {
 	// +optional
 	Description string
 
-	// NonPreempting specifies whether a pod with this PriorityClass could trigger a preemption process.
-	// If this field is unset, the PriorityClass is considered a preempting class by default.
+	// NonPreempting specifies whether a pod with this PriorityClass could start a preemption process.
+	// If this field is missing, the PriorityClass is considered a preempting class by default.
 	// +optional
 	NonPreempting bool
 }

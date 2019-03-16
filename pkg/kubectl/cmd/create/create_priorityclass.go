@@ -29,7 +29,7 @@ import (
 
 var (
 	pcLong = templates.LongDesc(i18n.T(`
-		Create a priorityclass with the specified name, value, globalDefault nonPreempting, and description`))
+		Create a priorityclass with the specified name, value, globalDefault，nonPreempting and description`))
 
 	pcExample = templates.Examples(i18n.T(`
 		# Create a priorityclass named high-priority
