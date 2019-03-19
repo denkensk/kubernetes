@@ -584,6 +584,7 @@ func TestPreemptionRaces(t *testing.T) {
 			for _, p := range additionalPods {
 				pod, err := cs.CoreV1().Pods(p.Namespace).Get(p.Name, metav1.GetOptions{})
 				if err != nil {
+					klog.Info("Error in getting Pod %v/%v info: %v", p.Namespace, p.Name, err)
 					t.Errorf("Error in getting Pod %v/%v info: %v", p.Namespace, p.Name, err)
 				}
 				if len(pod.Spec.NodeName) > 0 {

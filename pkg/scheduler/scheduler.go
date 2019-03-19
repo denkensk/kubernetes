@@ -301,6 +301,7 @@ func (sched *Scheduler) preempt(preemptor *v1.Pod, scheduleErr error) (string, e
 	}
 	var nodeName = ""
 	if node != nil {
+		klog.Infof("qingcan node.Name %v \n", node.Name)
 		nodeName = node.Name
 		// Update the scheduling queue with the nominated pod information. Without
 		// this, there would be a race condition between the next scheduling cycle
@@ -314,12 +315,14 @@ func (sched *Scheduler) preempt(preemptor *v1.Pod, scheduleErr error) (string, e
 			sched.config.SchedulingQueue.DeleteNominatedPodIfExists(preemptor)
 			return "", err
 		}
-
+		nominatedPods := sched.config.SchedulingQueue.NominatedPodsForNode(nodeName)
+		klog.Infof("qingcan nominatedPods %v \n", nominatedPods)
 		for _, victim := range victims {
 			if err := sched.config.PodPreemptor.DeletePod(victim); err != nil {
 				klog.Errorf("Error preempting pod %v/%v: %v", victim.Namespace, victim.Name, err)
 				return "", err
 			}
+			klog.Infof("qingcan victim %v \n by %v/%v on node %v", preemptor.Namespace, preemptor.Name, nodeName, victim)
 			sched.config.Recorder.Eventf(victim, v1.EventTypeNormal, "Preempted", "by %v/%v on node %v", preemptor.Namespace, preemptor.Name, nodeName)
 		}
 		metrics.PreemptionVictims.Set(float64(len(victims)))

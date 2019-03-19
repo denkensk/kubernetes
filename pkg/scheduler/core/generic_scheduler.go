@@ -539,6 +539,9 @@ func addNominatedPods(pod *v1.Pod, meta predicates.PredicateMetadata,
 		return false, meta, nodeInfo
 	}
 	nominatedPods := queue.NominatedPodsForNode(nodeInfo.Node().Name)
+
+	klog.Infof("qingcan nodeInfo.Node().Name %v \n", nodeInfo.Node().Name)
+	klog.Infof("qingcan nominatedPods %v \n", nominatedPods)
 	if nominatedPods == nil || len(nominatedPods) == 0 {
 		return false, meta, nodeInfo
 	}
@@ -548,6 +551,8 @@ func addNominatedPods(pod *v1.Pod, meta predicates.PredicateMetadata,
 	}
 	nodeInfoOut := nodeInfo.Clone()
 	for _, p := range nominatedPods {
+		klog.Infof("qingcan p %v \n", p)
+		klog.Infof("qingcan pod %v \n", pod)
 		if util.GetPodPriority(p) >= util.GetPodPriority(pod) && p.UID != pod.UID {
 			nodeInfoOut.AddPod(p)
 			if metaOut != nil {
@@ -601,6 +606,7 @@ func podFitsOnNode(
 		metaToUse := meta
 		nodeInfoToUse := info
 		if i == 0 {
+			klog.Infof("qingcan pod %v \n", pod)
 			podsAdded, metaToUse, nodeInfoToUse = addNominatedPods(pod, meta, info, queue)
 		} else if !podsAdded || len(failedPredicates) != 0 {
 			break
