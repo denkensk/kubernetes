@@ -2948,6 +2948,10 @@ type PodSpec struct {
 	// The higher the value, the higher the priority.
 	// +optional
 	Priority *int32 `json:"priority,omitempty" protobuf:"bytes,25,opt,name=priority"`
+	// Preempting specifies whether a pod with this PriorityClass could start a preemption process.
+	// If this field is missing, the PriorityClass is considered a Preempting class by default.
+	// +optional
+	Preempting *bool `json:"preempting,omitempty" protobuf:"bytes,31,opt,name=preempting"`
 	// Specifies the DNS parameters of a pod.
 	// Parameters specified here will be merged to the generated DNS
 	// configuration based on DNSPolicy.

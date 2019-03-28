@@ -2656,6 +2656,10 @@ type PodSpec struct {
 	// The higher the value, the higher the priority.
 	// +optional
 	Priority *int32
+	// Preempting specifies whether a pod with this PriorityClass could start a preemption process.
+	// If this field is missing, the PriorityClass is considered a Preempting class by default.
+	// +optional
+	Preempting *bool
 	// Specifies the DNS parameters of a pod.
 	// Parameters specified here will be merged to the generated DNS
 	// configuration based on DNSPolicy.
