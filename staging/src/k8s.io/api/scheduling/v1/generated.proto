@@ -53,7 +53,7 @@ message PriorityClass {
   // +optional
   optional string description = 4;
 
-  // preempting specifies whether a pod with this PriorityClass could trigger a preemption process.
+  // Preempting specifies whether a pod with this PriorityClass could trigger a preemption process.
   // If this field is unset, the PriorityClass is considered a Preempting class by default.
   // +optional
   optional bool preempting = 5;
