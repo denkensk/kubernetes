@@ -13,10 +13,10 @@ go_test(
     deps = [
         "//pkg/apis/core:go_default_library",
         "//pkg/apis/scheduling:go_default_library",
-        "//pkg/apis/scheduling/v1beta1:go_default_library",
+        "//pkg/apis/scheduling/v1:go_default_library",
         "//pkg/controller:go_default_library",
         "//pkg/features:go_default_library",
-        "//staging/src/k8s.io/api/scheduling/v1beta1:go_default_library",
+        "//staging/src/k8s.io/api/scheduling/v1:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
         "//staging/src/k8s.io/apiserver/pkg/admission:go_default_library",
         "//staging/src/k8s.io/apiserver/pkg/authentication/user:go_default_library",
