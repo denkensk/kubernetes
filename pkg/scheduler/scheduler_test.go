@@ -96,6 +96,7 @@ func (n *nodeLister) List() ([]*v1.Node, error) {
 }
 
 func podWithID(id, desiredHost string) *v1.Pod {
+	Preempting := true
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:     id,
@@ -103,7 +104,8 @@ func podWithID(id, desiredHost string) *v1.Pod {
 			SelfLink: fmt.Sprintf("/api/v1/%s/%s", string(v1.ResourcePods), id),
 		},
 		Spec: v1.PodSpec{
-			NodeName: desiredHost,
+			NodeName:   desiredHost,
+			Preempting: &Preempting,
 		},
 	}
 }
@@ -193,6 +195,7 @@ func TestSchedulerCreation(t *testing.T) {
 		informerFactory.Core().V1().Services(),
 		informerFactory.Policy().V1beta1().PodDisruptionBudgets(),
 		informerFactory.Storage().V1().StorageClasses(),
+		informerFactory.Scheduling().V1().PriorityClasses(),
 		eventBroadcaster.NewRecorder(scheme.Scheme, v1.EventSource{Component: "scheduler"}),
 		kubeschedulerconfig.SchedulerAlgorithmSource{Provider: &testSource},
 		stopCh,
@@ -651,6 +654,7 @@ func setupTestScheduler(queuedPodStore *clientcache.FIFO, scache internalcache.C
 		nil,
 		informerFactory.Core().V1().PersistentVolumeClaims().Lister(),
 		informerFactory.Policy().V1beta1().PodDisruptionBudgets().Lister(),
+		informerFactory.Scheduling().V1().PriorityClasses().Lister(),
 		false,
 		false,
 		schedulerapi.DefaultPercentageOfNodesToScore,
@@ -704,6 +708,7 @@ func setupTestSchedulerLongBindingWithRetry(queuedPodStore *clientcache.FIFO, sc
 		nil,
 		informerFactory.Core().V1().PersistentVolumeClaims().Lister(),
 		informerFactory.Policy().V1beta1().PodDisruptionBudgets().Lister(),
+		informerFactory.Scheduling().V1().PriorityClasses().Lister(),
 		false,
 		false,
 		schedulerapi.DefaultPercentageOfNodesToScore,
