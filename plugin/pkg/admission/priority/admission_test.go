@@ -21,7 +21,7 @@ import (
 
 	"k8s.io/klog"
 
-	schedulingv1beta1 "k8s.io/api/scheduling/v1beta1"
+	schedulingv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/authentication/user"
@@ -30,7 +30,7 @@ import (
 	"k8s.io/client-go/informers"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/apis/scheduling"
-	"k8s.io/kubernetes/pkg/apis/scheduling/v1beta1"
+	"k8s.io/kubernetes/pkg/apis/scheduling/v1"
 	"k8s.io/kubernetes/pkg/controller"
 	"k8s.io/kubernetes/pkg/features"
 )
@@ -40,11 +40,11 @@ func addPriorityClasses(ctrl *priorityPlugin, priorityClasses []*scheduling.Prio
 	ctrl.SetExternalKubeInformerFactory(informerFactory)
 	// First add the existing classes to the cache.
 	for _, c := range priorityClasses {
-		s := &schedulingv1beta1.PriorityClass{}
-		if err := v1beta1.Convert_scheduling_PriorityClass_To_v1beta1_PriorityClass(c, s, nil); err != nil {
+		s := &schedulingv1.PriorityClass{}
+		if err := v1.Convert_scheduling_PriorityClass_To_v1_PriorityClass(c, s, nil); err != nil {
 			return err
 		}
-		informerFactory.Scheduling().V1beta1().PriorityClasses().Informer().GetStore().Add(s)
+		informerFactory.Scheduling().V1().PriorityClasses().Informer().GetStore().Add(s)
 	}
 	return nil
 }
@@ -244,7 +244,7 @@ func TestDefaultPriority(t *testing.T) {
 		if err := addPriorityClasses(ctrl, test.classesBefore); err != nil {
 			t.Errorf("Test %q: unable to add object to informer: %v", test.name, err)
 		}
-		pcName, defaultPriority, err := ctrl.getDefaultPriority()
+		pcName, defaultPriority, _, err := ctrl.getDefaultPriority()
 		if err != nil {
 			t.Errorf("Test %q: unexpected error while getting default priority: %v", test.name, err)
 		}
@@ -262,7 +262,7 @@ func TestDefaultPriority(t *testing.T) {
 		if err := addPriorityClasses(ctrl, test.classesAfter); err != nil {
 			t.Errorf("Test %q: unable to add object to informer: %v", test.name, err)
 		}
-		pcName, defaultPriority, err = ctrl.getDefaultPriority()
+		pcName, defaultPriority, _, err = ctrl.getDefaultPriority()
 		if err != nil {
 			t.Errorf("Test %q: unexpected error while getting default priority: %v", test.name, err)
 		}
