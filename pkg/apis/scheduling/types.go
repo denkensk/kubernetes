@@ -34,6 +34,9 @@ const (
 	// start with SystemPriorityClassPrefix.
 	SystemClusterCritical = SystemPriorityClassPrefix + "cluster-critical"
 	SystemNodeCritical    = SystemPriorityClassPrefix + "node-critical"
+
+	// The default value for preempting attribute.
+	DefaultPreempting = true
 )
 
 // +genclient
@@ -64,6 +67,11 @@ type PriorityClass struct {
 	// when this priority class should be used.
 	// +optional
 	Description string
+
+	// Preempting specifies whether a pod with this PriorityClass could start a preemption process.
+	// If this field is missing, the PriorityClass is considered a preempting class by default.
+	// +optional
+	Preempting *bool
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
