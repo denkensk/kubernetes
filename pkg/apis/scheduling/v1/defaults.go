@@ -26,6 +26,8 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 	return RegisterDefaults(scheme)
 }
 
+// SetDefaults_PriorityClass sets additional defaults compared to its counterpart
+// in extensions.
 func SetDefaults_PriorityClass(obj *v1.PriorityClass) {
 	if obj.Preempting == nil {
 		// Set Preempting as true by default.
