@@ -969,6 +969,8 @@ func selectNodesForPreemption(pod *v1.Pod,
 		if meta != nil {
 			metaCopy = meta.ShallowCopy()
 		}
+
+		klog.Errorf("selectVictimsOnNode: %v", nodeName)
 		pods, numPDBViolations, fits := selectVictimsOnNode(pod, metaCopy, nodeNameToInfo[nodeName], fitPredicates, queue, pdbs)
 		if fits {
 			resultLock.Lock()
@@ -1090,6 +1092,9 @@ func selectVictimsOnNode(
 	var victims []*v1.Pod
 	numViolatingVictim := 0
 	potentialVictims.Sort()
+	for _, v := range potentialVictims.Items {
+		klog.Errorf("potentialVictims: %v", v.((*v1.Pod)).Name)
+	}
 	// Try to reprieve as many pods as possible. We first try to reprieve the PDB
 	// violating victims and then other non-violating ones. In both cases, we start
 	// from the highest priority victims.
