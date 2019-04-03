@@ -316,6 +316,9 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	for k, _ := range g.predicates {
+		klog.Errorf("g.predicates: %v", k)
+	}
 	nodeToVictims, err := selectNodesForPreemption(pod, g.nodeInfoSnapshot.NodeInfoMap, potentialNodes, g.predicates,
 		g.predicateMetaProducer, g.schedulingQueue, pdbs)
 	if err != nil {
@@ -592,7 +595,7 @@ func podFitsOnNode(
 	var failedPredicates []predicates.PredicateFailureReason
 
 	for k, _ := range predicateFuncs {
-		klog.Errorf("predicateFuncs: %v", k)
+		klog.Errorf("predicateFuncs2: %v", k)
 	}
 	podsAdded := false
 	// We run predicates twice in some cases. If the node has greater or equal priority
@@ -974,6 +977,9 @@ func selectNodesForPreemption(pod *v1.Pod,
 		}
 
 		klog.Errorf("selectVictimsOnNode: %v", nodeName)
+		for k, _ := range fitPredicates {
+			klog.Errorf("fitPredicates: %v", k)
+		}
 		pods, numPDBViolations, fits := selectVictimsOnNode(pod, metaCopy, nodeNameToInfo[nodeName], fitPredicates, queue, pdbs)
 		if fits {
 			resultLock.Lock()
@@ -1110,6 +1116,9 @@ func selectVictimsOnNode(
 	}
 	reprievePod := func(p *v1.Pod) bool {
 		addPod(p)
+		for k, _ := range fitPredicates {
+			klog.Errorf("fitPredicates1: %v", k)
+		}
 		fits, _, _ := podFitsOnNode(pod, meta, nodeInfoCopy, fitPredicates, queue, false)
 		klog.Errorf("podFitsOnNode: %v %v %v", pod.Name, nodeInfoCopy.Node().Name, fits)
 		if !fits {
