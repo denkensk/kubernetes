@@ -1103,7 +1103,7 @@ func selectVictimsOnNode(
 	reprievePod := func(p *v1.Pod) bool {
 		addPod(p)
 		fits, _, _ := podFitsOnNode(pod, meta, nodeInfoCopy, fitPredicates, queue, false)
-		klog.Errorf("podFitsOnNode: %v", fits)
+		klog.Errorf("podFitsOnNode: %v %v %v", pod.Name, nodeInfoCopy.Node().Name, fits)
 		if !fits {
 			removePod(p)
 			victims = append(victims, p)
