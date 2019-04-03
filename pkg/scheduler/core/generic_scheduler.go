@@ -318,7 +318,9 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	klog.Errorf("nodeToVictims1: %v", nodeToVictims)
+	for _, v := range nodeToVictims {
+		klog.Errorf("nodeToVictims1: %v", v)
+	}
 
 	// We will only check nodeToVictims with extenders that support preemption.
 	// Extenders which do not support preemption may later prevent preemptor from being scheduled on the nominated
@@ -327,13 +329,15 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	klog.Errorf("nodeToVictims2: %v", nodeToVictims)
+	for _, v := range nodeToVictims {
+		klog.Errorf("nodeToVictims2: %v", v)
+	}
 
 	candidateNode := pickOneNodeForPreemption(nodeToVictims)
 	if candidateNode == nil {
 		return nil, nil, nil, nil
 	}
-	klog.Errorf("candidateNode: %v", candidateNode)
+	klog.Errorf("candidateNode: %v", candidateNode.Name)
 
 	// Lower priority pods nominated to run on this node, may no longer fit on
 	// this node. So, we should remove their nomination. Removing their
@@ -343,8 +347,9 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if nodeInfo, ok := g.nodeInfoSnapshot.NodeInfoMap[candidateNode.Name]; ok {
 		return nodeInfo.Node(), nodeToVictims[candidateNode].Pods, nominatedPods, nil
 	}
-
-	klog.Errorf("nominatedPods: %v", nominatedPods)
+	for _, v := range nominatedPods {
+		klog.Errorf("nominatedPods: %v", v)
+	}
 
 	return nil, nil, nil, fmt.Errorf(
 		"preemption failed: the target node %s has been deleted from scheduler cache",
