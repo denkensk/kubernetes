@@ -49,6 +49,11 @@ func PodPriorityEnabled() bool {
 	return feature.DefaultFeatureGate.Enabled(features.PodPriority)
 }
 
+// NonPreemptingEnabled indicates whether NonPreempting feature is enabled.
+func NonPreemptingEnabled() bool {
+	return feature.DefaultFeatureGate.Enabled(features.NonPreemptingPriority)
+}
+
 // GetPodFullName returns a name that uniquely identifies a pod.
 func GetPodFullName(pod *v1.Pod) string {
 	// Use underscore as the delimiter because it is not allowed in pod name
