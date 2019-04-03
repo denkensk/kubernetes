@@ -319,7 +319,7 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 		return nil, nil, nil, err
 	}
 	for k, v := range nodeToVictims {
-		klog.Errorf("nodeToVictims1: %k %v", k.Name, v)
+		klog.Errorf("nodeToVictims1: %v %v", k.Name, v)
 	}
 
 	// We will only check nodeToVictims with extenders that support preemption.
