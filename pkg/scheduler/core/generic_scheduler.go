@@ -304,6 +304,9 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 		return nil, nil, nil, ErrNoNodesAvailable
 	}
 	potentialNodes := nodesWherePreemptionMightHelp(allNodes, fitError.FailedPredicates)
+	for _, v := range potentialNodes {
+		klog.Errorf("potentialNodes: %v", v.Name)
+	}
 	if len(potentialNodes) == 0 {
 		klog.V(3).Infof("Preemption will not help schedule pod %v/%v on any node.", pod.Namespace, pod.Name)
 		// In this case, we should clean-up any existing nominated node name of the pod.
@@ -1077,11 +1080,13 @@ func selectVictimsOnNode(
 	// support this case for performance reasons. Having affinity to lower
 	// priority pods is not a recommended configuration anyway.
 	if fits, _, err := podFitsOnNode(pod, meta, nodeInfoCopy, fitPredicates, queue, false); !fits {
+		klog.Errorf("fits: %v %v", fits, nodeInfoCopy.Node().Name)
 		if err != nil {
 			klog.Warningf("Encountered error while selecting victims on node %v: %v", nodeInfo.Node().Name, err)
 		}
 		return nil, 0, false
 	}
+
 	var victims []*v1.Pod
 	numViolatingVictim := 0
 	potentialVictims.Sort()
@@ -1089,9 +1094,16 @@ func selectVictimsOnNode(
 	// violating victims and then other non-violating ones. In both cases, we start
 	// from the highest priority victims.
 	violatingVictims, nonViolatingVictims := filterPodsWithPDBViolation(potentialVictims.Items, pdbs)
+	for _, v := range violatingVictims {
+		klog.Errorf("violatingVictims: %v", v.Name)
+	}
+	for _, v := range nonViolatingVictims {
+		klog.Errorf("nonViolatingVictims: %v", v.Name)
+	}
 	reprievePod := func(p *v1.Pod) bool {
 		addPod(p)
 		fits, _, _ := podFitsOnNode(pod, meta, nodeInfoCopy, fitPredicates, queue, false)
+		klog.Errorf("podFitsOnNode: %v", fits)
 		if !fits {
 			removePod(p)
 			victims = append(victims, p)
