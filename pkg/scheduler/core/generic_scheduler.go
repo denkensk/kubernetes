@@ -318,6 +318,7 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	klog.Info("nodeToVictims1: %v", nodeToVictims)
 
 	// We will only check nodeToVictims with extenders that support preemption.
 	// Extenders which do not support preemption may later prevent preemptor from being scheduled on the nominated
@@ -326,11 +327,13 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	klog.Info("nodeToVictims2: %v", nodeToVictims)
 
 	candidateNode := pickOneNodeForPreemption(nodeToVictims)
 	if candidateNode == nil {
 		return nil, nil, nil, nil
 	}
+	klog.Info("candidateNode: %v", candidateNode)
 
 	// Lower priority pods nominated to run on this node, may no longer fit on
 	// this node. So, we should remove their nomination. Removing their
@@ -340,6 +343,8 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if nodeInfo, ok := g.nodeInfoSnapshot.NodeInfoMap[candidateNode.Name]; ok {
 		return nodeInfo.Node(), nodeToVictims[candidateNode].Pods, nominatedPods, nil
 	}
+
+	klog.Info("nominatedPods: %v", nominatedPods)
 
 	return nil, nil, nil, fmt.Errorf(
 		"preemption failed: the target node %s has been deleted from scheduler cache",
@@ -621,6 +626,7 @@ func podFitsOnNode(
 				if !fit {
 					// eCache is available and valid, and predicates result is unfit, record the fail reasons
 					failedPredicates = append(failedPredicates, reasons...)
+					klog.Info("reasons: %v", reasons)
 					// if alwaysCheckAllPredicates is false, short circuit all predicates when one predicate fails.
 					if !alwaysCheckAllPredicates {
 						klog.V(5).Infoln("since alwaysCheckAllPredicates has not been set, the predicate " +
