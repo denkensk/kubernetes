@@ -591,6 +591,9 @@ func podFitsOnNode(
 ) (bool, []predicates.PredicateFailureReason, error) {
 	var failedPredicates []predicates.PredicateFailureReason
 
+	for k, _ := range predicateFuncs {
+		klog.Errorf("predicateFuncs: %v", k)
+	}
 	podsAdded := false
 	// We run predicates twice in some cases. If the node has greater or equal priority
 	// nominated pods, we run them when those pods are added to meta and nodeInfo.
