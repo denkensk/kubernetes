@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors.
+Copyright 2019 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -1395,6 +1395,6 @@ func TestSetDefaultPreempting(t *testing.T) {
 	pod := &v1.Pod{}
 	output := roundTrip(t, runtime.Object(pod)).(*v1.Pod)
 	if output.Spec.Preempting == nil || *output.Spec.Preempting != v1.DefaultPreempting {
-		t.Errorf("Expected enableServiceLinks value: %+v\ngot: %+v\n", v1.DefaultPreempting, *output.Spec.Preempting)
+		t.Errorf("Expected preempting value: %+v\ngot: %+v\n", v1.DefaultPreempting, *output.Spec.Preempting)
 	}
 }
