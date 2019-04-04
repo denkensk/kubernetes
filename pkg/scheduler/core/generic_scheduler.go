@@ -145,7 +145,6 @@ type genericScheduler struct {
 	volumeBinder             *volumebinder.VolumeBinder
 	pvcLister                corelisters.PersistentVolumeClaimLister
 	pdbLister                algorithm.PDBLister
-	priorityClassLister      algorithm.PriorityClassLister
 	disablePreemption        bool
 	percentageOfNodesToScore int32
 	enableNonPreempting      bool
@@ -1211,7 +1210,6 @@ func NewGenericScheduler(
 	volumeBinder *volumebinder.VolumeBinder,
 	pvcLister corelisters.PersistentVolumeClaimLister,
 	pdbLister algorithm.PDBLister,
-	priorityClassLister algorithm.PriorityClassLister,
 	alwaysCheckAllPredicates bool,
 	disablePreemption bool,
 	percentageOfNodesToScore int32,
@@ -1230,7 +1228,6 @@ func NewGenericScheduler(
 		volumeBinder:             volumeBinder,
 		pvcLister:                pvcLister,
 		pdbLister:                pdbLister,
-		priorityClassLister:      priorityClassLister,
 		alwaysCheckAllPredicates: alwaysCheckAllPredicates,
 		disablePreemption:        disablePreemption,
 		percentageOfNodesToScore: percentageOfNodesToScore,

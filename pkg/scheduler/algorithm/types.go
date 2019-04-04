@@ -25,12 +25,6 @@ import (
 	schedulerapi "k8s.io/kubernetes/pkg/scheduler/api"
 )
 
-// PriorityClassLister represents anything that can get PriorityClass object
-type PriorityClassLister interface {
-	// Get retrieves the PriorityClass from the index for a given name.
-	Get(name string) (*scheduling.PriorityClass, error)
-}
-
 // NodeFieldSelectorKeys is a map that: the key are node field selector keys; the values are
 // the functions to get the value of the node field.
 var NodeFieldSelectorKeys = map[string]func(*v1.Node) string{

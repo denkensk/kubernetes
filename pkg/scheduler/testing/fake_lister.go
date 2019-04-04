@@ -223,12 +223,3 @@ type FakePDBLister []*policy.PodDisruptionBudget
 func (f FakePDBLister) List(labels.Selector) ([]*policy.PodDisruptionBudget, error) {
 	return f, nil
 }
-
-// FakePriorityClassLister implements PriorityClassLister on a slice of Priority for test purposes.
-type FakePriorityClassLister schedulingv1.PriorityClass
-
-// Get returns a PriorityClass by name.
-func (f FakePriorityClassLister) Get(name string) (*schedulingv1.PriorityClass, error) {
-	pc := schedulingv1.PriorityClass(f)
-	return &pc, nil
-}

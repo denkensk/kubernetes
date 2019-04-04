@@ -481,7 +481,6 @@ func TestGenericScheduler(t *testing.T) {
 				nil,
 				pvcLister,
 				schedulertesting.FakePDBLister{},
-				schedulertesting.FakePriorityClassLister{},
 				test.alwaysCheckAllPredicates,
 				false,
 				schedulerapi.DefaultPercentageOfNodesToScore,
@@ -515,7 +514,7 @@ func makeScheduler(predicates map[string]algorithmpredicates.FitPredicate, nodes
 		prioritizers,
 		priorities.EmptyPriorityMetadataProducer,
 		emptyPluginSet,
-		nil, nil, nil, nil, nil, false, false,
+		nil, nil, nil, nil, false, false,
 		schedulerapi.DefaultPercentageOfNodesToScore, false)
 	cache.UpdateNodeInfoSnapshot(&s.(*genericScheduler).nodeInfoSnapshot)
 	return s.(*genericScheduler)
@@ -1534,7 +1533,6 @@ func TestPreempt(t *testing.T) {
 				nil,
 				schedulertesting.FakePersistentVolumeClaimLister{},
 				schedulertesting.FakePDBLister{},
-				schedulertesting.FakePriorityClassLister{},
 				false,
 				false,
 				schedulerapi.DefaultPercentageOfNodesToScore,

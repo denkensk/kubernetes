@@ -547,7 +547,6 @@ func TestGenericSchedulerWithExtenders(t *testing.T) {
 				nil,
 				schedulertesting.FakePersistentVolumeClaimLister{},
 				schedulertesting.FakePDBLister{},
-				schedulertesting.FakePriorityClassLister{},
 				false,
 				false,
 				schedulerapi.DefaultPercentageOfNodesToScore,
