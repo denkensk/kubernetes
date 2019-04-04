@@ -48,6 +48,8 @@ import (
 var (
 	errPrioritize = fmt.Errorf("priority map encounters an error")
 	order         = []string{"false", "true", "matches", "nopods", algorithmpredicates.MatchInterPodAffinityPred}
+	nonPreempting = false
+	preempting    = true
 )
 
 func falsePredicate(pod *v1.Pod, meta algorithmpredicates.PredicateMetadata, nodeInfo *schedulernodeinfo.NodeInfo) (bool, []algorithmpredicates.PredicateFailureReason, error) {
@@ -482,7 +484,8 @@ func TestGenericScheduler(t *testing.T) {
 				schedulertesting.FakePriorityClassLister{},
 				test.alwaysCheckAllPredicates,
 				false,
-				schedulerapi.DefaultPercentageOfNodesToScore)
+				schedulerapi.DefaultPercentageOfNodesToScore,
+				false)
 			result, err := scheduler.Schedule(test.pod, schedulertesting.FakeNodeLister(makeNodeList(test.nodes)))
 
 			if !reflect.DeepEqual(err, test.wErr) {
@@ -513,7 +516,7 @@ func makeScheduler(predicates map[string]algorithmpredicates.FitPredicate, nodes
 		priorities.EmptyPriorityMetadataProducer,
 		emptyPluginSet,
 		nil, nil, nil, nil, nil, false, false,
-		schedulerapi.DefaultPercentageOfNodesToScore)
+		schedulerapi.DefaultPercentageOfNodesToScore, false)
 	cache.UpdateNodeInfoSnapshot(&s.(*genericScheduler).nodeInfoSnapshot)
 	return s.(*genericScheduler)
 
@@ -1477,6 +1480,22 @@ func TestPreempt(t *testing.T) {
 			expectedNode: "machine3",
 			expectedPods: []string{},
 		},
+		{
+			name: "no preempting in pod",
+			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
+				Containers: veryLargeContainers,
+				Priority:   &highPriority,
+				Preempting: &nonPreempting},
+			},
+			pods: []*v1.Pod{
+				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &lowPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "m1.2", UID: types.UID("m1.2")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &lowPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "m2.1", UID: types.UID("m2.1")}, Spec: v1.PodSpec{Containers: largeContainers, Priority: &highPriority, NodeName: "machine2"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
+				{ObjectMeta: metav1.ObjectMeta{Name: "m3.1", UID: types.UID("m3.1")}, Spec: v1.PodSpec{Containers: mediumContainers, Priority: &midPriority, NodeName: "machine3"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
+			},
+			expectedNode: "",
+			expectedPods: nil,
+		},
 	}
 
 	for _, test := range tests {
@@ -1506,7 +1525,7 @@ func TestPreempt(t *testing.T) {
 			scheduler := NewGenericScheduler(
 				cache,
 				internalqueue.NewSchedulingQueue(nil),
-				map[string]algorithmpredicates.FitPredicate{"matches": algorithmpredicates.PodFitsResources},
+				map[string]algorithmpredicates.FitPredicate{"PodFitsResources": algorithmpredicates.PodFitsResources},
 				algorithmpredicates.EmptyPredicateMetadataProducer,
 				[]priorities.PriorityConfig{{Function: numericPriority, Weight: 1}},
 				priorities.EmptyPriorityMetadataProducer,
@@ -1518,7 +1537,8 @@ func TestPreempt(t *testing.T) {
 				schedulertesting.FakePriorityClassLister{},
 				false,
 				false,
-				schedulerapi.DefaultPercentageOfNodesToScore)
+				schedulerapi.DefaultPercentageOfNodesToScore,
+				true)
 			scheduler.(*genericScheduler).snapshot()
 			// Call Preempt and check the expected results.
 			node, victims, _, err := scheduler.Preempt(test.pod, schedulertesting.FakeNodeLister(makeNodeList(nodeNames)), error(&FitError{Pod: test.pod, FailedPredicates: failedPredMap}))
@@ -1559,60 +1579,6 @@ func TestPreempt(t *testing.T) {
 				t.Errorf("didn't expect any more preemption. Node %v is selected for preemption.", node)
 			}
 			close(stop)
-		})
-	}
-}
-
-func TestNumFeasibleNodesToFind(t *testing.T) {
-	tests := []struct {
-		name                     string
-		percentageOfNodesToScore int32
-		numAllNodes              int32
-		wantNumNodes             int32
-	}{
-		{
-			name:         "not set percentageOfNodesToScore and nodes number not more than 50",
-			numAllNodes:  10,
-			wantNumNodes: 10,
-		},
-		{
-			name:                     "set percentageOfNodesToScore and nodes number not more than 50",
-			percentageOfNodesToScore: 40,
-			numAllNodes:              10,
-			wantNumNodes:             10,
-		},
-		{
-			name:         "not set percentageOfNodesToScore and nodes number more than 50",
-			numAllNodes:  1000,
-			wantNumNodes: 420,
-		},
-		{
-			name:                     "set percentageOfNodesToScore and nodes number more than 50",
-			percentageOfNodesToScore: 40,
-			numAllNodes:              1000,
-			wantNumNodes:             400,
-		},
-		{
-			name:         "not set percentageOfNodesToScore and nodes number more than 50*125",
-			numAllNodes:  6000,
-			wantNumNodes: 300,
-		},
-		{
-			name:                     "set percentageOfNodesToScore and nodes number more than 50*125",
-			percentageOfNodesToScore: 40,
-			numAllNodes:              6000,
-			wantNumNodes:             2400,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := &genericScheduler{
-				percentageOfNodesToScore: tt.percentageOfNodesToScore,
-			}
-			if gotNumNodes := g.numFeasibleNodesToFind(tt.numAllNodes); gotNumNodes != tt.wantNumNodes {
-				t.Errorf("genericScheduler.numFeasibleNodesToFind() = %v, want %v", gotNumNodes, tt.wantNumNodes)
-			}
 		})
 	}
 }
