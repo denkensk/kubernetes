@@ -166,10 +166,10 @@ type genericScheduler struct {
 	volumeBinder             *volumebinder.VolumeBinder
 	pvcLister                corelisters.PersistentVolumeClaimLister
 	pdbLister                algorithm.PDBLister
-	priorityClassLister      algorithm.PriorityClassLister
 	disablePreemption        bool
 	lastIndex                int
 	percentageOfNodesToScore int32
+	enableNonPreempting      bool
 }
 
 // snapshot snapshots scheduler cache and node infos for all fit and priority
@@ -315,7 +315,7 @@ func (g *genericScheduler) Preempt(pod *v1.Pod, nodeLister algorithm.NodeLister,
 	if !ok || fitError == nil {
 		return nil, nil, nil, nil
 	}
-	if !podEligibleToPreemptOthers(pod, g.nodeInfoSnapshot.NodeInfoMap) {
+	if !podEligibleToPreemptOthers(pod, g.nodeInfoSnapshot.NodeInfoMap, g.enableNonPreempting) {
 		klog.V(5).Infof("Pod %v/%v is not eligible for more preemption.", pod.Namespace, pod.Name)
 		return nil, nil, nil, nil
 	}
@@ -1163,8 +1163,8 @@ func nodesWherePreemptionMightHelp(nodes []*v1.Node, failedPredicatesMap FailedP
 // considered for preemption.
 // We look at the node that is nominated for this pod and as long as there are
 // terminating pods on the node, we don't consider this for preempting more pods.
-func podEligibleToPreemptOthers(pod *v1.Pod, nodeNameToInfo map[string]*schedulernodeinfo.NodeInfo) bool {
-	if pod.Spec.Preempting != nil && !*(pod.Spec.Preempting) {
+func podEligibleToPreemptOthers(pod *v1.Pod, nodeNameToInfo map[string]*schedulernodeinfo.NodeInfo, enableNonPreempting bool) bool {
+	if enableNonPreempting && pod.Spec.Preempting != nil && !*(pod.Spec.Preempting) {
 		klog.V(5).Infof("Pod %v/%v with this Preempting could not start a preemption process.", pod.Namespace, pod.Name)
 		return false
 	}
@@ -1222,10 +1222,10 @@ func NewGenericScheduler(
 	volumeBinder *volumebinder.VolumeBinder,
 	pvcLister corelisters.PersistentVolumeClaimLister,
 	pdbLister algorithm.PDBLister,
-	priorityClassLister algorithm.PriorityClassLister,
 	alwaysCheckAllPredicates bool,
 	disablePreemption bool,
 	percentageOfNodesToScore int32,
+	enableNonPreempting bool,
 ) ScheduleAlgorithm {
 	return &genericScheduler{
 		cache:                    cache,
@@ -1240,9 +1240,9 @@ func NewGenericScheduler(
 		volumeBinder:             volumeBinder,
 		pvcLister:                pvcLister,
 		pdbLister:                pdbLister,
-		priorityClassLister:      priorityClassLister,
 		alwaysCheckAllPredicates: alwaysCheckAllPredicates,
 		disablePreemption:        disablePreemption,
 		percentageOfNodesToScore: percentageOfNodesToScore,
+		enableNonPreempting:      enableNonPreempting,
 	}
 }
