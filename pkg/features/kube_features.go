@@ -440,6 +440,12 @@ const (
 	//
 	// Enables the regional PD feature on GCE.
 	deprecatedGCERegionalPersistentDisk featuregate.Feature = "GCERegionalPersistentDisk"
+
+	// owner: @denkensk
+	// alpha: v1.15
+	//
+	// Enables NonPreempting option for priorityClass and pod.
+	NonPreemptingPriority featuregate.Feature = "NonPreemptingPriority"
 )
 
 func init() {
@@ -514,6 +520,7 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 	TTLAfterFinished:                            {Default: false, PreRelease: featuregate.Alpha},
 	KubeletPodResources:                         {Default: false, PreRelease: featuregate.Alpha},
 	WindowsGMSA:                                 {Default: false, PreRelease: featuregate.Alpha},
+	NonPreemptingPriority:                       {Default: false, PreRelease: featuregate.Alpha},
 
 	// inherited features from generic apiserver, relisted here to get a conflict if it is changed
 	// unintentionally on either side:
