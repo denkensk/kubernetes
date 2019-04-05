@@ -72,7 +72,7 @@ func NewCmdCreatePriorityClass(f cmdutil.Factory, ioStreams genericclioptions.IO
 	cmd.Flags().Int32("value", 0, i18n.T("the value of this priority class."))
 	cmd.Flags().Bool("global-default", false, i18n.T("global-default specifies whether this PriorityClass should be considered as the default priority."))
 	cmd.Flags().String("description", "", i18n.T("description is an arbitrary string that usually provides guidelines on when this priority class should be used."))
-	cmd.Flags().Bool("preempting", false, i18n.T("preempting specifies whether a pod with this PriorityClass could trigger a preemption process."))
+	cmd.Flags().Bool("preempting", true, i18n.T("preempting specifies whether a pod with this PriorityClass could trigger a preemption process."))
 
 	return cmd
 }
