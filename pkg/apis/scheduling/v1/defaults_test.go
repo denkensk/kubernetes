@@ -54,6 +54,6 @@ func TestSetDefaultPreempting(t *testing.T) {
 	priorityClass := &v1.PriorityClass{}
 	output := roundTrip(t, runtime.Object(priorityClass)).(*v1.PriorityClass)
 	if output.Preempting == nil || *output.Preempting != scheduling.DefaultPreempting {
-		t.Errorf("Expected enableServiceLinks value: %+v\ngot: %+v\n", scheduling.DefaultPreempting, *output.Preempting)
+		t.Errorf("Expected PriorityClass.Preempting value: %+v\ngot: %+v\n", scheduling.DefaultPreempting, *output.Preempting)
 	}
 }
