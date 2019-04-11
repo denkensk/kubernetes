@@ -25,8 +25,8 @@ import (
 )
 
 func TestPriorityClassV1Generator(t *testing.T) {
-	true := true
-	false := false
+	trueVal := true
+	falseVal := false
 	tests := []struct {
 		name      string
 		params    map[string]interface{}
@@ -49,7 +49,7 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				Value:         int32(1000),
 				GlobalDefault: false,
 				Description:   "high priority class",
-				Preempting:    &false,
+				Preempting:    &falseVal,
 			},
 			expectErr: false,
 		},
@@ -69,7 +69,7 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				Value:         int32(1000),
 				GlobalDefault: false,
 				Description:   "high priority class",
-				Preempting:    &true,
+				Preempting:    &trueVal,
 			},
 			expectErr: false,
 		},
@@ -89,7 +89,7 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				Value:         int32(1000),
 				GlobalDefault: true,
 				Description:   "high priority class",
-				Preempting:    &false,
+				Preempting:    &falseVal,
 			},
 			expectErr: false,
 		},
