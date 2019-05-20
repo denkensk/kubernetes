@@ -8,15 +8,11 @@ load(
 
 go_library(
     name = "go_default_library",
-    srcs = [
-        "helpers.go",
-        "util.go",
-    ],
-    importpath = "k8s.io/kubernetes/pkg/apis/storage/util",
+    srcs = ["util.go"],
+    importpath = "k8s.io/kubernetes/pkg/apis/scheduling/util",
     deps = [
-        "//pkg/apis/storage:go_default_library",
+        "//pkg/apis/scheduling:go_default_library",
         "//pkg/features:go_default_library",
-        "//staging/src/k8s.io/apimachinery/pkg/apis/meta/v1:go_default_library",
         "//staging/src/k8s.io/apiserver/pkg/util/feature:go_default_library",
     ],
 )
@@ -39,7 +35,7 @@ go_test(
     srcs = ["util_test.go"],
     embed = [":go_default_library"],
     deps = [
-        "//pkg/apis/storage:go_default_library",
+        "//pkg/apis/scheduling:go_default_library",
         "//pkg/features:go_default_library",
         "//staging/src/k8s.io/apimachinery/pkg/util/diff:go_default_library",
         "//staging/src/k8s.io/apiserver/pkg/util/feature:go_default_library",
