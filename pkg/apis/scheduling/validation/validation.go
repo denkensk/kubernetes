@@ -52,5 +52,9 @@ func ValidatePriorityClassUpdate(pc, oldPc *scheduling.PriorityClass) field.Erro
 	if pc.Value != oldPc.Value {
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("Value"), "may not be changed in an update."))
 	}
+	// Preempting is immutable and is checked by the ObjectMeta validator.
+	if pc.Preempting != oldPc.Preempting {
+		allErrs = append(allErrs, field.Forbidden(field.NewPath("Preempting"), "may not be changed in an update."))
+	}
 	return allErrs
 }

@@ -52,7 +52,7 @@ type PriorityClass struct {
 	Description string `json:"description,omitempty" protobuf:"bytes,4,opt,name=description"`
 
 	// Preempting specifies whether a pod with this PriorityClass could trigger a preemption process.
-	// If this field is unset, the PriorityClass is considered a Preempting class by default.
+	// This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
 	// +optional
 	Preempting *bool `json:"preempting,omitempty" protobuf:"bytes,5,opt,name=preempting"`
 }

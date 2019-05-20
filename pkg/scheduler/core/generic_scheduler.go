@@ -28,6 +28,7 @@ import (
 
 	"k8s.io/klog"
 
+	"go/types"
 	"k8s.io/api/core/v1"
 	policy "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,6 +48,7 @@ import (
 	"k8s.io/kubernetes/pkg/scheduler/util"
 	"k8s.io/kubernetes/pkg/scheduler/volumebinder"
 	utiltrace "k8s.io/utils/trace"
+	"reflect"
 )
 
 const (
@@ -1164,9 +1166,15 @@ func nodesWherePreemptionMightHelp(nodes []*v1.Node, failedPredicatesMap FailedP
 // We look at the node that is nominated for this pod and as long as there are
 // terminating pods on the node, we don't consider this for preempting more pods.
 func podEligibleToPreemptOthers(pod *v1.Pod, nodeNameToInfo map[string]*schedulernodeinfo.NodeInfo, enableNonPreempting bool) bool {
-	if enableNonPreempting && pod.Spec.Preempting != nil && !*(pod.Spec.Preempting) {
-		klog.V(5).Infof("Pod %v/%v is no eligible for preemption, because it uses a non-preempting priority class.", pod.Namespace, pod.Name)
-		return false
+	if enableNonPreempting && pod.Spec.Preempting != nil {
+		if reflect.TypeOf(*(pod.Spec.Preempting)).Kind() != reflect.Bool {
+			klog.V(5).Infof("Pod %v/%v is no eligible for preemption, because the Spec.Preempting if not bool.", pod.Namespace, pod.Name)
+			return false
+		}
+		if !*(pod.Spec.Preempting) {
+			klog.V(5).Infof("Pod %v/%v is no eligible for preemption, because it uses a non-preempting priority class.", pod.Namespace, pod.Name)
+			return false
+		}
 	}
 	nomNodeName := pod.Status.NominatedNodeName
 	if len(nomNodeName) > 0 {

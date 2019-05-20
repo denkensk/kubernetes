@@ -123,6 +123,12 @@ const (
 	//
 	// Enables managing request concurrency with prioritization and fairness at each server
 	RequestManagement featuregate.Feature = "RequestManagement"
+
+	// owner: @denkensk
+	// alpha: v1.15
+	//
+	// Enables NonPreempting option for priorityClass and pod.
+	NonPreemptingPriority featuregate.Feature = "NonPreemptingPriority"
 )
 
 func init() {
@@ -146,4 +152,5 @@ var defaultKubernetesFeatureGates = map[featuregate.Feature]featuregate.FeatureS
 	WinDSR:                  {Default: false, PreRelease: featuregate.Alpha},
 	WatchBookmark:           {Default: false, PreRelease: featuregate.Alpha},
 	RequestManagement:       {Default: false, PreRelease: featuregate.Alpha},
+	NonPreemptingPriority:   {Default: false, PreRelease: featuregate.Alpha},
 }
