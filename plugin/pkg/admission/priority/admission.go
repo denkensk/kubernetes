@@ -212,7 +212,10 @@ func (p *priorityPlugin) admitPod(a admission.Attributes) error {
 			}
 
 			priority = pc.Value
-			preempting = pc.Preempting
+
+			if utilfeature.DefaultFeatureGate.Enabled(features.NonPreemptingPriority) && pc.Preempting != nil && pc.Preempting != preempting {
+				preempting = pc.Preempting
+			}
 		}
 		// if the pod contained a priority that differs from the one computed from the priority class, error
 		if pod.Spec.Priority != nil && *pod.Spec.Priority != priority {

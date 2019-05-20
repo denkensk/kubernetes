@@ -443,7 +443,6 @@ func ClusterRoles() []rbacv1.ClusterRole {
 				// Needed to check API access.  These creates are non-mutating
 				rbacv1helpers.NewRule("create").Groups(authenticationGroup).Resources("tokenreviews").RuleOrDie(),
 				rbacv1helpers.NewRule("create").Groups(authorizationGroup).Resources("subjectaccessreviews").RuleOrDie(),
-				rbacv1helpers.NewRule(Read...).Groups(schedulingGroup).Resources("priorityclasses").RuleOrDie(),
 			},
 		},
 		{
