@@ -59,7 +59,6 @@ func newStorage(t *testing.T) (*REST, *BindingREST, *StatusREST, *etcdtesting.Et
 func validNewPod() *api.Pod {
 	grace := int64(30)
 	enableServiceLinks := v1.DefaultEnableServiceLinks
-	preempting := v1.DefaultPreempting
 	return &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
@@ -84,7 +83,7 @@ func validNewPod() *api.Pod {
 			SecurityContext:    &api.PodSecurityContext{},
 			SchedulerName:      api.DefaultSchedulerName,
 			EnableServiceLinks: &enableServiceLinks,
-			Preempting:         &preempting,
+			PreemptionPolicy:   api.PreemptNever,
 		},
 	}
 }
@@ -785,7 +784,6 @@ func TestEtcdUpdateScheduled(t *testing.T) {
 
 	grace := int64(30)
 	enableServiceLinks := v1.DefaultEnableServiceLinks
-	preempting := v1.DefaultPreempting
 	podIn := api.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "foo",
@@ -810,7 +808,7 @@ func TestEtcdUpdateScheduled(t *testing.T) {
 			SecurityContext:               &api.PodSecurityContext{},
 			SchedulerName:                 api.DefaultSchedulerName,
 			EnableServiceLinks:            &enableServiceLinks,
-			Preempting:                    &preempting,
+			PreemptionPolicy:              api.PreemptNever,
 		},
 	}
 	_, _, err = storage.Update(ctx, podIn.Name, rest.DefaultUpdatedObjectInfo(&podIn), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
@@ -889,12 +887,11 @@ func TestEtcdUpdateStatus(t *testing.T) {
 	expected.ResourceVersion = "2"
 	grace := int64(30)
 	enableServiceLinks := v1.DefaultEnableServiceLinks
-	preempting := v1.DefaultPreempting
 	expected.Spec.TerminationGracePeriodSeconds = &grace
 	expected.Spec.RestartPolicy = api.RestartPolicyAlways
 	expected.Spec.DNSPolicy = api.DNSClusterFirst
 	expected.Spec.EnableServiceLinks = &enableServiceLinks
-	expected.Spec.Preempting = &preempting
+	expected.Spec.PreemptionPolicy = api.PreemptNever
 	expected.Spec.Containers[0].ImagePullPolicy = api.PullIfNotPresent
 	expected.Spec.Containers[0].TerminationMessagePath = api.TerminationMessagePathDefault
 	expected.Spec.Containers[0].TerminationMessagePolicy = api.TerminationMessageReadFile

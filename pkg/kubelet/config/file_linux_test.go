@@ -140,7 +140,6 @@ type testCase struct {
 func getTestCases(hostname types.NodeName) []*testCase {
 	grace := int64(30)
 	enableServiceLinks := v1.DefaultEnableServiceLinks
-	preempting := v1.DefaultPreempting
 	return []*testCase{
 		{
 			lock: &sync.Mutex{},
@@ -182,8 +181,8 @@ func getTestCases(hostname types.NodeName) []*testCase {
 						Effect:   "NoExecute",
 					}},
 					Containers: []v1.Container{{
-						Name:                     "image",
-						Image:                    "test/image",
+						Name:  "image",
+						Image: "test/image",
 						TerminationMessagePath:   "/dev/termination-log",
 						ImagePullPolicy:          "Always",
 						SecurityContext:          securitycontext.ValidSecurityContextWithContainerDefaults(),
@@ -192,7 +191,7 @@ func getTestCases(hostname types.NodeName) []*testCase {
 					SecurityContext:    &v1.PodSecurityContext{},
 					SchedulerName:      api.DefaultSchedulerName,
 					EnableServiceLinks: &enableServiceLinks,
-					Preempting:         &preempting,
+					PreemptionPolicy:   corev1.PreemptLowerPriority,
 				},
 				Status: v1.PodStatus{
 					Phase: v1.PodPending,

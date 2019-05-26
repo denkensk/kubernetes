@@ -25,7 +25,7 @@ import (
 // DropDisabledFields removes disabled fields from the PriorityClass object.
 func DropDisabledFields(class, oldClass *scheduling.PriorityClass) {
 	if !utilfeature.DefaultFeatureGate.Enabled(features.NonPreemptingPriority) && !preemptingPriorityInUse(oldClass) {
-		class.Preempting = nil
+		class.PreemptionPolicy = ""
 	}
 }
 
@@ -33,7 +33,7 @@ func preemptingPriorityInUse(oldClass *scheduling.PriorityClass) bool {
 	if oldClass == nil {
 		return false
 	}
-	if oldClass.Preempting != nil {
+	if oldClass.PreemptionPolicy != "" {
 		return true
 	}
 	return false

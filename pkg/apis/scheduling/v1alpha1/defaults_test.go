@@ -26,7 +26,7 @@ import (
 
 	// enforce that all types are installed
 	_ "k8s.io/kubernetes/pkg/api/testapi"
-	"k8s.io/kubernetes/pkg/apis/scheduling"
+	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
@@ -53,7 +53,7 @@ func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 func TestSetDefaultPreempting(t *testing.T) {
 	priorityClass := &v1alpha1.PriorityClass{}
 	output := roundTrip(t, runtime.Object(priorityClass)).(*v1alpha1.PriorityClass)
-	if output.Preempting == nil || *output.Preempting != scheduling.DefaultPreempting {
-		t.Errorf("Expected PriorityClass.Preempting value: %+v\ngot: %+v\n", scheduling.DefaultPreempting, *output.Preempting)
+	if output.PreemptionPolicy == "" || output.PreemptionPolicy != api.PreemptLowerPriority {
+		t.Errorf("Expected PriorityClass.Preempting value: %+v\ngot: %+v\n", api.PreemptLowerPriority, output.PreemptionPolicy)
 	}
 }

@@ -22,8 +22,6 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
-	"k8s.io/kubernetes/pkg/features"
 	"k8s.io/kubernetes/pkg/util/parsers"
 	utilpointer "k8s.io/utils/pointer"
 )
@@ -164,10 +162,8 @@ func SetDefaults_Pod(obj *v1.Pod) {
 		enableServiceLinks := v1.DefaultEnableServiceLinks
 		obj.Spec.EnableServiceLinks = &enableServiceLinks
 	}
-	if utilfeature.DefaultFeatureGate.Enabled(features.NonPreemptingPriority) && obj.Spec.Preempting == nil {
-		// Set Preempting as true by default.
-		Preempting := v1.DefaultPreempting
-		obj.Spec.Preempting = &Preempting
+	if obj.Spec.PreemptionPolicy == "" {
+		obj.Spec.PreemptionPolicy = v1.PreemptNever
 	}
 }
 func SetDefaults_PodSpec(obj *v1.PodSpec) {

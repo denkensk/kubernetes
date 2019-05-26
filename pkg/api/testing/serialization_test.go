@@ -217,7 +217,6 @@ func TestRoundTripTypes(t *testing.T) {
 func TestEncodePtr(t *testing.T) {
 	grace := int64(30)
 	enableServiceLinks := v1.DefaultEnableServiceLinks
-	preempting := v1.DefaultPreempting
 	pod := &api.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{"name": "foo"},
@@ -231,7 +230,7 @@ func TestEncodePtr(t *testing.T) {
 			SecurityContext:    &api.PodSecurityContext{},
 			SchedulerName:      api.DefaultSchedulerName,
 			EnableServiceLinks: &enableServiceLinks,
-			Preempting:         &preempting,
+			PreemptionPolicy:   api.PreemptNever,
 		},
 	}
 	obj := runtime.Object(pod)

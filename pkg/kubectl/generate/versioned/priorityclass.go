@@ -22,16 +22,17 @@ import (
 	scheduling "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/kubectl/generate"
 )
 
 // PriorityClassV1Generator supports stable generation of a priorityClass.
 type PriorityClassV1Generator struct {
-	Name          string
-	Value         int32
-	GlobalDefault bool
-	Description   string
-	Preempting    bool
+	Name             string
+	Value            int32
+	GlobalDefault    bool
+	Description      string
+	PreemptionPolicy api.PreemptionPolicy
 }
 
 // Ensure it supports the generator pattern that uses parameters specified during construction.
@@ -71,12 +72,12 @@ func (s PriorityClassV1Generator) Generate(params map[string]interface{}) (runti
 		return nil, fmt.Errorf("expected string, found %v", description)
 	}
 
-	Preempting, found := params["preempting"].(bool)
+	preemptionPolicy, found := params["preemptionPolicy"].(api.PreemptionPolicy)
 	if !found {
-		return nil, fmt.Errorf("expected bool, found %v", Preempting)
+		return nil, fmt.Errorf("expected bool, found %v", preemptionPolicy)
 	}
 
-	delegate := &PriorityClassV1Generator{Name: name, Value: value, GlobalDefault: globalDefault, Description: description, Preempting: Preempting}
+	delegate := &PriorityClassV1Generator{Name: name, Value: value, GlobalDefault: globalDefault, Description: description, PreemptionPolicy: preemptionPolicy}
 	return delegate.StructuredGenerate()
 }
 
@@ -86,9 +87,9 @@ func (s *PriorityClassV1Generator) StructuredGenerate() (runtime.Object, error) 
 		ObjectMeta: metav1.ObjectMeta{
 			Name: s.Name,
 		},
-		Value:         s.Value,
-		GlobalDefault: s.GlobalDefault,
-		Description:   s.Description,
-		Preempting:    &s.Preempting,
+		Value:            s.Value,
+		GlobalDefault:    s.GlobalDefault,
+		Description:      s.Description,
+		PreemptionPolicy: s.PreemptionPolicy,
 	}, nil
 }

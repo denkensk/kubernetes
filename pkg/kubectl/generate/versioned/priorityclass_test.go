@@ -19,14 +19,13 @@ package versioned
 import (
 	scheduling "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	api "k8s.io/kubernetes/pkg/apis/core"
 
 	"reflect"
 	"testing"
 )
 
 func TestPriorityClassV1Generator(t *testing.T) {
-	trueVal := true
-	falseVal := false
 	tests := []struct {
 		name      string
 		params    map[string]interface{}
@@ -46,10 +45,10 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "foo",
 				},
-				Value:         int32(1000),
-				GlobalDefault: false,
-				Description:   "high priority class",
-				Preempting:    &falseVal,
+				Value:            int32(1000),
+				GlobalDefault:    false,
+				Description:      "high priority class",
+				PreemptionPolicy: api.PreemptNever,
 			},
 			expectErr: false,
 		},
@@ -66,10 +65,10 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "foo",
 				},
-				Value:         int32(1000),
-				GlobalDefault: false,
-				Description:   "high priority class",
-				Preempting:    &trueVal,
+				Value:            int32(1000),
+				GlobalDefault:    false,
+				Description:      "high priority class",
+				PreemptionPolicy: api.PreemptLowerPriority,
 			},
 			expectErr: false,
 		},
@@ -86,10 +85,10 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "foo",
 				},
-				Value:         int32(1000),
-				GlobalDefault: true,
-				Description:   "high priority class",
-				Preempting:    &falseVal,
+				Value:            int32(1000),
+				GlobalDefault:    true,
+				Description:      "high priority class",
+				PreemptionPolicy: api.PreemptNever,
 			},
 			expectErr: false,
 		},

@@ -18,6 +18,7 @@ package fuzzer
 
 import (
 	"github.com/google/gofuzz"
+	"k8s.io/api/core/v1"
 	runtimeserializer "k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/kubernetes/pkg/apis/scheduling"
 )
@@ -27,9 +28,8 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(s *scheduling.PriorityClass, c fuzz.Continue) {
 			c.FuzzNoCustom(s)
-			if s.Preempting == nil {
-				preempting := scheduling.DefaultPreempting
-				s.Preempting = &preempting
+			if s.PreemptionPolicy == "" {
+				s.PreemptionPolicy = v1.NeverPreempt
 			}
 		},
 	}

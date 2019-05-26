@@ -18,6 +18,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
 // +genclient
@@ -50,10 +51,10 @@ type PriorityClass struct {
 	// +optional
 	Description string `json:"description,omitempty" protobuf:"bytes,4,opt,name=description"`
 
-	// Preempting specifies whether a pod with this PriorityClass could trigger a preemption process.
+	// PreemptionPolicy specifies whether a pod with this PriorityClass could trigger a preemption process.
 	// This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
 	// +optional
-	Preempting *bool `json:"preempting,omitempty" protobuf:"bytes,5,opt,name=preempting"`
+	PreemptionPolicy api.PreemptionPolicy `json:"preemptionPolicy,omitempty" protobuf:"bytes,5,opt,name=preemptionPolicy"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

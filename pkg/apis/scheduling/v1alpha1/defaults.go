@@ -19,7 +19,7 @@ package v1alpha1
 import (
 	"k8s.io/api/scheduling/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/kubernetes/pkg/apis/scheduling"
+	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
@@ -29,9 +29,7 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 // SetDefaults_PriorityClass sets additional defaults compared to its counterpart
 // in extensions.
 func SetDefaults_PriorityClass(obj *v1alpha1.PriorityClass) {
-	if obj.Preempting == nil {
-		// Set Preempting as true by default.
-		Preempting := scheduling.DefaultPreempting
-		obj.Preempting = &Preempting
+	if obj.PreemptionPolicy == "" {
+		obj.PreemptionPolicy = api.PreemptLowerPriority
 	}
 }

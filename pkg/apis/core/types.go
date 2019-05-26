@@ -1941,6 +1941,16 @@ const (
 	PullIfNotPresent PullPolicy = "IfNotPresent"
 )
 
+// PullPolicy describes a policy for if/when to pull a container image
+type PreemptionPolicy string
+
+const (
+	// PullAlways means that kubelet always attempts to pull the latest image. Container will fail If the pull fails.
+	PreemptLowerPriority PreemptionPolicy = "PreemptLowerPriority"
+	// PullNever means that kubelet never pulls an image, but only uses a local image. Container will fail if the image isn't present
+	PreemptNever PreemptionPolicy = "Never"
+)
+
 // TerminationMessagePolicy describes how termination messages are retrieved from a container.
 type TerminationMessagePolicy string
 
@@ -2665,7 +2675,7 @@ type PodSpec struct {
 	// Preempting specifies whether a pod with this PriorityClass could start a preemption process.
 	// This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
 	// +optional
-	Preempting *bool
+	PreemptionPolicy PreemptionPolicy
 	// Specifies the DNS parameters of a pod.
 	// Parameters specified here will be merged to the generated DNS
 	// configuration based on DNSPolicy.
