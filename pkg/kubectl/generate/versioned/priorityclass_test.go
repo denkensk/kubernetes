@@ -17,9 +17,9 @@ limitations under the License.
 package versioned
 
 import (
+	apiv1 "k8s.io/api/core/v1"
 	scheduling "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	api "k8s.io/kubernetes/pkg/apis/core"
 
 	"reflect"
 	"testing"
@@ -48,7 +48,7 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				Value:            int32(1000),
 				GlobalDefault:    false,
 				Description:      "high priority class",
-				PreemptionPolicy: api.PreemptNever,
+				PreemptionPolicy: apiv1.PreemptNever,
 			},
 			expectErr: false,
 		},
@@ -68,7 +68,7 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				Value:            int32(1000),
 				GlobalDefault:    false,
 				Description:      "high priority class",
-				PreemptionPolicy: api.PreemptLowerPriority,
+				PreemptionPolicy: apiv1.PreemptLowerPriority,
 			},
 			expectErr: false,
 		},
@@ -88,7 +88,7 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				Value:            int32(1000),
 				GlobalDefault:    true,
 				Description:      "high priority class",
-				PreemptionPolicy: api.PreemptNever,
+				PreemptionPolicy: apiv1.PreemptNever,
 			},
 			expectErr: false,
 		},

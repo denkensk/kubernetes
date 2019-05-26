@@ -25,7 +25,6 @@ go_library(
     importpath = "k8s.io/kubernetes/pkg/kubectl/generate/versioned",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/apis/core:go_default_library",
         "//pkg/kubectl/generate:go_default_library",
         "//pkg/kubectl/util:go_default_library",
         "//pkg/kubectl/util/hash:go_default_library",
@@ -76,7 +75,6 @@ go_test(
     ],
     embed = [":go_default_library"],
     deps = [
-        "//pkg/apis/core:go_default_library",
         "//pkg/kubectl/generate:go_default_library",
         "//staging/src/k8s.io/api/apps/v1:go_default_library",
         "//staging/src/k8s.io/api/apps/v1beta1:go_default_library",

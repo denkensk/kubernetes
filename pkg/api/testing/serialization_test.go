@@ -230,7 +230,7 @@ func TestEncodePtr(t *testing.T) {
 			SecurityContext:    &api.PodSecurityContext{},
 			SchedulerName:      api.DefaultSchedulerName,
 			EnableServiceLinks: &enableServiceLinks,
-			PreemptionPolicy:   api.PreemptNever,
+			PreemptionPolicy:   v1.PreemptNever,
 		},
 	}
 	obj := runtime.Object(pod)

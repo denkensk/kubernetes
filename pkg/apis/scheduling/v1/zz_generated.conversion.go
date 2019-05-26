@@ -23,10 +23,10 @@ package v1
 import (
 	unsafe "unsafe"
 
+	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/scheduling/v1"
 	conversion "k8s.io/apimachinery/pkg/conversion"
 	runtime "k8s.io/apimachinery/pkg/runtime"
-	core "k8s.io/kubernetes/pkg/apis/core"
 	scheduling "k8s.io/kubernetes/pkg/apis/scheduling"
 )
 
@@ -65,7 +65,7 @@ func autoConvert_v1_PriorityClass_To_scheduling_PriorityClass(in *v1.PriorityCla
 	out.Value = in.Value
 	out.GlobalDefault = in.GlobalDefault
 	out.Description = in.Description
-	out.PreemptionPolicy = core.PreemptionPolicy(in.PreemptionPolicy)
+	out.PreemptionPolicy = corev1.PreemptionPolicy(in.PreemptionPolicy)
 	return nil
 }
 
@@ -79,7 +79,7 @@ func autoConvert_scheduling_PriorityClass_To_v1_PriorityClass(in *scheduling.Pri
 	out.Value = in.Value
 	out.GlobalDefault = in.GlobalDefault
 	out.Description = in.Description
-	out.PreemptionPolicy = core.PreemptionPolicy(in.PreemptionPolicy)
+	out.PreemptionPolicy = corev1.PreemptionPolicy(in.PreemptionPolicy)
 	return nil
 }
 

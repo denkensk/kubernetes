@@ -19,10 +19,10 @@ package versioned
 import (
 	"fmt"
 
+	apiv1 "k8s.io/api/core/v1"
 	scheduling "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/kubectl/generate"
 )
 
@@ -32,7 +32,7 @@ type PriorityClassV1Generator struct {
 	Value            int32
 	GlobalDefault    bool
 	Description      string
-	PreemptionPolicy api.PreemptionPolicy
+	PreemptionPolicy apiv1.PreemptionPolicy
 }
 
 // Ensure it supports the generator pattern that uses parameters specified during construction.
@@ -72,7 +72,7 @@ func (s PriorityClassV1Generator) Generate(params map[string]interface{}) (runti
 		return nil, fmt.Errorf("expected string, found %v", description)
 	}
 
-	preemptionPolicy, found := params["preemptionPolicy"].(api.PreemptionPolicy)
+	preemptionPolicy, found := params["preemptionPolicy"].(apiv1.PreemptionPolicy)
 	if !found {
 		return nil, fmt.Errorf("expected bool, found %v", preemptionPolicy)
 	}

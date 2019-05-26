@@ -17,6 +17,7 @@ limitations under the License.
 package core
 
 import (
+	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -2675,7 +2676,7 @@ type PodSpec struct {
 	// Preempting specifies whether a pod with this PriorityClass could start a preemption process.
 	// This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
 	// +optional
-	PreemptionPolicy PreemptionPolicy
+	PreemptionPolicy apiv1.PreemptionPolicy
 	// Specifies the DNS parameters of a pod.
 	// Parameters specified here will be merged to the generated DNS
 	// configuration based on DNSPolicy.

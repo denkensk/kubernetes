@@ -103,7 +103,6 @@ func (n *nodeLister) List() ([]*v1.Node, error) {
 }
 
 func podWithID(id, desiredHost string) *v1.Pod {
-	Preempting := true
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:     id,
@@ -111,8 +110,8 @@ func podWithID(id, desiredHost string) *v1.Pod {
 			SelfLink: fmt.Sprintf("/api/v1/%s/%s", string(v1.ResourcePods), id),
 		},
 		Spec: v1.PodSpec{
-			NodeName:   desiredHost,
-			Preempting: &Preempting,
+			NodeName:         desiredHost,
+			PreemptionPolicy: v1.PreemptLowerPriority,
 		},
 	}
 }

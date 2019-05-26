@@ -83,7 +83,7 @@ func validNewPod() *api.Pod {
 			SecurityContext:    &api.PodSecurityContext{},
 			SchedulerName:      api.DefaultSchedulerName,
 			EnableServiceLinks: &enableServiceLinks,
-			PreemptionPolicy:   api.PreemptNever,
+			PreemptionPolicy:   v1.PreemptNever,
 		},
 	}
 }
@@ -808,7 +808,7 @@ func TestEtcdUpdateScheduled(t *testing.T) {
 			SecurityContext:               &api.PodSecurityContext{},
 			SchedulerName:                 api.DefaultSchedulerName,
 			EnableServiceLinks:            &enableServiceLinks,
-			PreemptionPolicy:              api.PreemptNever,
+			PreemptionPolicy:              v1.PreemptNever,
 		},
 	}
 	_, _, err = storage.Update(ctx, podIn.Name, rest.DefaultUpdatedObjectInfo(&podIn), rest.ValidateAllObjectFunc, rest.ValidateAllObjectUpdateFunc, false, &metav1.UpdateOptions{})
@@ -891,7 +891,7 @@ func TestEtcdUpdateStatus(t *testing.T) {
 	expected.Spec.RestartPolicy = api.RestartPolicyAlways
 	expected.Spec.DNSPolicy = api.DNSClusterFirst
 	expected.Spec.EnableServiceLinks = &enableServiceLinks
-	expected.Spec.PreemptionPolicy = api.PreemptNever
+	expected.Spec.PreemptionPolicy = v1.PreemptNever
 	expected.Spec.Containers[0].ImagePullPolicy = api.PullIfNotPresent
 	expected.Spec.Containers[0].TerminationMessagePath = api.TerminationMessagePathDefault
 	expected.Spec.Containers[0].TerminationMessagePolicy = api.TerminationMessageReadFile

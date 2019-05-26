@@ -17,9 +17,9 @@ limitations under the License.
 package v1alpha1
 
 import (
+	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/api/scheduling/v1alpha1"
 	"k8s.io/apimachinery/pkg/runtime"
-	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
 func addDefaultingFuncs(scheme *runtime.Scheme) error {
@@ -30,6 +30,6 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 // in extensions.
 func SetDefaults_PriorityClass(obj *v1alpha1.PriorityClass) {
 	if obj.PreemptionPolicy == "" {
-		obj.PreemptionPolicy = api.PreemptLowerPriority
+		obj.PreemptionPolicy = apiv1.PreemptLowerPriority
 	}
 }

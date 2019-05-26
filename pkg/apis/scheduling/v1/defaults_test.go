@@ -25,8 +25,8 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
 	// enforce that all types are installed
+	apiv1 "k8s.io/api/core/v1"
 	_ "k8s.io/kubernetes/pkg/api/testapi"
-	api "k8s.io/kubernetes/pkg/apis/core"
 )
 
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
@@ -53,7 +53,7 @@ func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 func TestSetDefaultPreemptionPolicy(t *testing.T) {
 	priorityClass := &v1.PriorityClass{}
 	output := roundTrip(t, runtime.Object(priorityClass)).(*v1.PriorityClass)
-	if output.PreemptionPolicy == "" || output.PreemptionPolicy != api.PreemptLowerPriority {
-		t.Errorf("Expected PriorityClass.PreemptionPolicy value: %+v\ngot: %+v\n", api.PreemptLowerPriority, output.PreemptionPolicy)
+	if output.PreemptionPolicy == "" || output.PreemptionPolicy != apiv1.PreemptLowerPriority {
+		t.Errorf("Expected PriorityClass.PreemptionPolicy value: %+v\ngot: %+v\n", apiv1.PreemptLowerPriority, output.PreemptionPolicy)
 	}
 }

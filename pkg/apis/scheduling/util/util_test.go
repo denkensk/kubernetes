@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/diff"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	featuregatetesting "k8s.io/component-base/featuregate/testing"
@@ -29,13 +30,12 @@ import (
 )
 
 func TestDropNonPreemptingPriority(t *testing.T) {
-	preempting := false
 	pcWithoutNonPreemptingPriority := func() *scheduling.PriorityClass {
 		return &scheduling.PriorityClass{}
 	}
 	pcWithNonPreemptingPriority := func() *scheduling.PriorityClass {
 		return &scheduling.PriorityClass{
-			Preempting: &preempting,
+			PreemptionPolicy: apiv1.PreemptNever,
 		}
 	}
 
@@ -47,17 +47,17 @@ func TestDropNonPreemptingPriority(t *testing.T) {
 		{
 			description:              "PriorityClass Without NonPreemptingPriority",
 			hasNonPreemptingPriority: false,
-			pc:                       pcWithoutNonPreemptingPriority,
+			pc: pcWithoutNonPreemptingPriority,
 		},
 		{
 			description:              "PriorityClass With NonPreemptingPriority",
 			hasNonPreemptingPriority: true,
-			pc:                       pcWithNonPreemptingPriority,
+			pc: pcWithNonPreemptingPriority,
 		},
 		{
 			description:              "is nil",
 			hasNonPreemptingPriority: false,
-			pc:                       func() *scheduling.PriorityClass { return nil },
+			pc: func() *scheduling.PriorityClass { return nil },
 		},
 	}
 

@@ -49,8 +49,6 @@ import (
 var (
 	errPrioritize = fmt.Errorf("priority map encounters an error")
 	order         = []string{"false", "true", "matches", "nopods", algorithmpredicates.MatchInterPodAffinityPred}
-	nonPreempting = false
-	preempting    = true
 )
 
 func falsePredicate(pod *v1.Pod, meta algorithmpredicates.PredicateMetadata, nodeInfo *schedulernodeinfo.NodeInfo) (bool, []algorithmpredicates.PredicateFailureReason, error) {
@@ -418,9 +416,9 @@ func TestGenericScheduler(t *testing.T) {
 			predicates:               map[string]algorithmpredicates.FitPredicate{"true": truePredicate, "matches": matchesPredicate, "false": falsePredicate},
 			prioritizers:             []priorities.PriorityConfig{{Map: EqualPriorityMap, Weight: 1}},
 			alwaysCheckAllPredicates: true,
-			nodes:                    []string{"1"},
-			pod:                      &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "2", UID: types.UID("2")}},
-			name:                     "test alwaysCheckAllPredicates is true",
+			nodes: []string{"1"},
+			pod:   &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "2", UID: types.UID("2")}},
+			name:  "test alwaysCheckAllPredicates is true",
 			wErr: &FitError{
 				Pod:         &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "2", UID: types.UID("2")}},
 				NumAllNodes: 1,
@@ -1467,9 +1465,9 @@ func TestPreempt(t *testing.T) {
 		{
 			name: "no preempting in pod",
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
-				Containers: veryLargeContainers,
-				Priority:   &highPriority,
-				Preempting: &nonPreempting},
+				Containers:       veryLargeContainers,
+				Priority:         &highPriority,
+				PreemptionPolicy: v1.PreemptNever},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &lowPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1579,7 +1577,7 @@ func TestNumFeasibleNodesToFind(t *testing.T) {
 			wantNumNodes: 10,
 		},
 		{
-			name:                     "set percentageOfNodesToScore and nodes number not more than 50",
+			name: "set percentageOfNodesToScore and nodes number not more than 50",
 			percentageOfNodesToScore: 40,
 			numAllNodes:              10,
 			wantNumNodes:             10,
@@ -1590,7 +1588,7 @@ func TestNumFeasibleNodesToFind(t *testing.T) {
 			wantNumNodes: 420,
 		},
 		{
-			name:                     "set percentageOfNodesToScore and nodes number more than 50",
+			name: "set percentageOfNodesToScore and nodes number more than 50",
 			percentageOfNodesToScore: 40,
 			numAllNodes:              1000,
 			wantNumNodes:             400,
@@ -1601,7 +1599,7 @@ func TestNumFeasibleNodesToFind(t *testing.T) {
 			wantNumNodes: 300,
 		},
 		{
-			name:                     "set percentageOfNodesToScore and nodes number more than 50*125",
+			name: "set percentageOfNodesToScore and nodes number more than 50*125",
 			percentageOfNodesToScore: 40,
 			numAllNodes:              6000,
 			wantNumNodes:             2400,

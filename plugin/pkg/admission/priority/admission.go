@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 
+	apiv1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -179,7 +180,7 @@ func (p *priorityPlugin) admitPod(a admission.Attributes) error {
 
 	if operation == admission.Create {
 		var priority int32
-		var preemptionPolicy api.PreemptionPolicy
+		var preemptionPolicy apiv1.PreemptionPolicy
 		// TODO: @ravig - This is for backwards compatibility to ensure that critical pods with annotations just work fine.
 		// Remove when no longer needed.
 		if len(pod.Spec.PriorityClassName) == 0 &&
@@ -268,7 +269,7 @@ func (p *priorityPlugin) getDefaultPriorityClass() (*schedulingv1.PriorityClass,
 	return defaultPC, nil
 }
 
-func (p *priorityPlugin) getDefaultPriority() (string, int32, api.PreemptionPolicy, error) {
+func (p *priorityPlugin) getDefaultPriority() (string, int32, apiv1.PreemptionPolicy, error) {
 	dpc, err := p.getDefaultPriorityClass()
 	if err != nil {
 		return "", 0, "", err
@@ -276,5 +277,5 @@ func (p *priorityPlugin) getDefaultPriority() (string, int32, api.PreemptionPoli
 	if dpc != nil {
 		return dpc.Name, dpc.Value, dpc.PreemptionPolicy, nil
 	}
-	return "", int32(scheduling.DefaultPriorityWhenNoDefaultClassExists), api.PreemptLowerPriority, nil
+	return "", int32(scheduling.DefaultPriorityWhenNoDefaultClassExists), apiv1.PreemptLowerPriority, nil
 }
