@@ -47,17 +47,17 @@ func TestDropNonPreemptingPriority(t *testing.T) {
 		{
 			description:              "PriorityClass Without NonPreemptingPriority",
 			hasNonPreemptingPriority: false,
-			pc: pcWithoutNonPreemptingPriority,
+			pc:                       pcWithoutNonPreemptingPriority,
 		},
 		{
 			description:              "PriorityClass With NonPreemptingPriority",
 			hasNonPreemptingPriority: true,
-			pc: pcWithNonPreemptingPriority,
+			pc:                       pcWithNonPreemptingPriority,
 		},
 		{
 			description:              "is nil",
 			hasNonPreemptingPriority: false,
-			pc: func() *scheduling.PriorityClass { return nil },
+			pc:                       func() *scheduling.PriorityClass { return nil },
 		},
 	}
 

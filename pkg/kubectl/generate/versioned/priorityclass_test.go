@@ -17,7 +17,6 @@ limitations under the License.
 package versioned
 
 import (
-	apiv1 "k8s.io/api/core/v1"
 	scheduling "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -39,16 +38,14 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				"value":          int32(1000),
 				"global-default": false,
 				"description":    "high priority class",
-				"preempting":     false,
 			},
 			expected: &scheduling.PriorityClass{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "foo",
 				},
-				Value:            int32(1000),
-				GlobalDefault:    false,
-				Description:      "high priority class",
-				PreemptionPolicy: apiv1.PreemptNever,
+				Value:         int32(1000),
+				GlobalDefault: false,
+				Description:   "high priority class",
 			},
 			expectErr: false,
 		},
@@ -59,16 +56,14 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				"value":          int32(1000),
 				"global-default": false,
 				"description":    "high priority class",
-				"preempting":     true,
 			},
 			expected: &scheduling.PriorityClass{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "foo",
 				},
-				Value:            int32(1000),
-				GlobalDefault:    false,
-				Description:      "high priority class",
-				PreemptionPolicy: apiv1.PreemptLowerPriority,
+				Value:         int32(1000),
+				GlobalDefault: false,
+				Description:   "high priority class",
 			},
 			expectErr: false,
 		},
@@ -79,16 +74,14 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				"value":          int32(1000),
 				"global-default": true,
 				"description":    "high priority class",
-				"preempting":     false,
 			},
 			expected: &scheduling.PriorityClass{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "foo",
 				},
-				Value:            int32(1000),
-				GlobalDefault:    true,
-				Description:      "high priority class",
-				PreemptionPolicy: apiv1.PreemptNever,
+				Value:         int32(1000),
+				GlobalDefault: true,
+				Description:   "high priority class",
 			},
 			expectErr: false,
 		},
@@ -98,7 +91,6 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				"name":           "foo",
 				"global-default": true,
 				"description":    "high priority class",
-				"preempting":     false,
 			},
 			expectErr: true,
 		},
