@@ -19,7 +19,6 @@ package pod
 import (
 	"strings"
 
-	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	api "k8s.io/kubernetes/pkg/apis/core"
@@ -384,7 +383,7 @@ func dropDisabledFields(
 		!podPriorityInUse(oldPodSpec) {
 		// Set to nil pod's Preempting fields if the feature is disabled and the old pod
 		// does not specify any values for these fields.
-		podSpec.PreemptionPolicy = apiv1.PreemptNever
+		podSpec.PreemptionPolicy = ""
 	}
 }
 

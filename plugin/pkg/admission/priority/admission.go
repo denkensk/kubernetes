@@ -214,7 +214,7 @@ func (p *priorityPlugin) admitPod(a admission.Attributes) error {
 
 			priority = pc.Value
 
-			if pc.PreemptionPolicy != "" && pc.PreemptionPolicy != preemptionPolicy {
+			if utilfeature.DefaultFeatureGate.Enabled(features.NonPreemptingPriority) {
 				preemptionPolicy = pc.PreemptionPolicy
 			}
 		}

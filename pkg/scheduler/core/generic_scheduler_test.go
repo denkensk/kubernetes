@@ -1344,8 +1344,9 @@ func TestPreempt(t *testing.T) {
 		{
 			name: "basic preemption logic",
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
-				Containers: veryLargeContainers,
-				Priority:   &highPriority},
+				Containers:       veryLargeContainers,
+				Priority:         &highPriority,
+				PreemptionPolicy: v1.PreemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &lowPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1359,8 +1360,9 @@ func TestPreempt(t *testing.T) {
 		{
 			name: "One node doesn't need any preemption",
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
-				Containers: veryLargeContainers,
-				Priority:   &highPriority},
+				Containers:       veryLargeContainers,
+				Priority:         &highPriority,
+				PreemptionPolicy: v1.PreemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &lowPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1374,8 +1376,9 @@ func TestPreempt(t *testing.T) {
 		{
 			name: "Scheduler extenders allow only machine1, otherwise machine3 would have been chosen",
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
-				Containers: veryLargeContainers,
-				Priority:   &highPriority},
+				Containers:       veryLargeContainers,
+				Priority:         &highPriority,
+				PreemptionPolicy: v1.PreemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &midPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1397,8 +1400,9 @@ func TestPreempt(t *testing.T) {
 		{
 			name: "Scheduler extenders do not allow any preemption",
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
-				Containers: veryLargeContainers,
-				Priority:   &highPriority},
+				Containers:       veryLargeContainers,
+				Priority:         &highPriority,
+				PreemptionPolicy: v1.PreemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &midPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1417,8 +1421,9 @@ func TestPreempt(t *testing.T) {
 		{
 			name: "One scheduler extender allows only machine1, the other returns error but ignorable. Only machine1 would be chosen",
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
-				Containers: veryLargeContainers,
-				Priority:   &highPriority},
+				Containers:       veryLargeContainers,
+				Priority:         &highPriority,
+				PreemptionPolicy: v1.PreemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &midPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1441,8 +1446,9 @@ func TestPreempt(t *testing.T) {
 		{
 			name: "One scheduler extender allows only machine1, but it is not interested in given pod, otherwise machine1 would have been chosen",
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
-				Containers: veryLargeContainers,
-				Priority:   &highPriority},
+				Containers:       veryLargeContainers,
+				Priority:         &highPriority,
+				PreemptionPolicy: v1.PreemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &midPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1605,7 +1611,6 @@ func TestNumFeasibleNodesToFind(t *testing.T) {
 			wantNumNodes:             2400,
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			g := &genericScheduler{
