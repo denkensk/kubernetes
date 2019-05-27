@@ -52,7 +52,7 @@ type PriorityClass struct {
 	// +optional
 	Description string `json:"description,omitempty" protobuf:"bytes,4,opt,name=description"`
 
-	// PreemptionPolicy specifies whether a pod with this PriorityClass could trigger a preemption process.
+	// PreemptionPolicy is the Policy for preempting pods with lower priority.
 	// This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
 	// +optional
 	PreemptionPolicy apiv1.PreemptionPolicy `json:"preemptionPolicy,omitempty" protobuf:"bytes,5,opt,name=preemptionPolicy"`

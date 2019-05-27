@@ -1471,7 +1471,6 @@ func TestUpdateRcWithRetries(t *testing.T) {
 					TerminationGracePeriodSeconds: &grace,
 					SecurityContext:               &corev1.PodSecurityContext{},
 					EnableServiceLinks:            &enableServiceLinks,
-					PreemptionPolicy:              corev1.PreemptLowerPriority,
 				},
 			},
 		},
