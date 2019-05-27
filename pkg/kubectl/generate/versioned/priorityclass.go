@@ -42,9 +42,9 @@ func (PriorityClassV1Generator) ParamNames() []generate.GeneratorParam {
 		{Name: "value", Required: true},
 		{Name: "global-default", Required: false},
 		{Name: "description", Required: false},
-		{Name: "preemptionPolicy", Required: false},
 	}
 }
+
 func (s PriorityClassV1Generator) Generate(params map[string]interface{}) (runtime.Object, error) {
 	if err := generate.ValidateParams(s.ParamNames(), params); err != nil {
 		return nil, err
@@ -69,7 +69,6 @@ func (s PriorityClassV1Generator) Generate(params map[string]interface{}) (runti
 	if !found {
 		return nil, fmt.Errorf("expected string, found %v", description)
 	}
-
 	delegate := &PriorityClassV1Generator{Name: name, Value: value, GlobalDefault: globalDefault, Description: description}
 	return delegate.StructuredGenerate()
 }

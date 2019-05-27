@@ -68,7 +68,7 @@ type PriorityClass struct {
 	// +optional
 	Description string
 
-	// Preempting specifies whether a pod with this PriorityClass could start a preemption process.
+	// PreemptionPolicy it the Policy for preempting pods with lower priority.
 	// This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
 	// +optional
 	PreemptionPolicy apiv1.PreemptionPolicy

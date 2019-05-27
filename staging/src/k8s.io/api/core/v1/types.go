@@ -2046,13 +2046,13 @@ const (
 	PullIfNotPresent PullPolicy = "IfNotPresent"
 )
 
-// PullPolicy describes a policy for if/when to pull a container image
+// PreemptionPolicy describes a policy for if/when to preempt a pod.
 type PreemptionPolicy string
 
 const (
-	// PullAlways means that kubelet always attempts to pull the latest image. Container will fail If the pull fails.
+	// PreemptLowerPriority means that pod can preempt other pods with lower priority.
 	PreemptLowerPriority PreemptionPolicy = "PreemptLowerPriority"
-	// PullNever means that kubelet never pulls an image, but only uses a local image. Container will fail if the image isn't present
+	// PreemptNever means that pod never preempt other pods with lower priority.
 	PreemptNever PreemptionPolicy = "Never"
 )
 
@@ -2971,7 +2971,7 @@ type PodSpec struct {
 	// The higher the value, the higher the priority.
 	// +optional
 	Priority *int32 `json:"priority,omitempty" protobuf:"bytes,25,opt,name=priority"`
-	// Preempting specifies whether a pod with this PriorityClass could start a preemption process.
+	// PreemptionPolicy is the Policy for preempting pods with lower priority.
 	// This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
 	// +optional
 	PreemptionPolicy PreemptionPolicy `json:"preemptionPolicy,omitempty" protobuf:"bytes,31,opt,name=preemptionPolicy"`

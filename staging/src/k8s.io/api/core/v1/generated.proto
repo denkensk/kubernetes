@@ -3181,7 +3181,7 @@ message PodSpec {
   // +optional
   optional int32 priority = 25;
 
-  // Preempting specifies whether a pod with this PriorityClass could start a preemption process.
+  // PreemptionPolicy is the Policy for preempting pods with lower priority.
   // This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
   // +optional
   optional string preemptionPolicy = 31;
