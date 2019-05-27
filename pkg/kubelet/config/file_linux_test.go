@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"k8s.io/api/core/v1"
-	apiv1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -192,7 +191,6 @@ func getTestCases(hostname types.NodeName) []*testCase {
 					SecurityContext:    &v1.PodSecurityContext{},
 					SchedulerName:      api.DefaultSchedulerName,
 					EnableServiceLinks: &enableServiceLinks,
-					PreemptionPolicy:   apiv1.PreemptLowerPriority,
 				},
 				Status: v1.PodStatus{
 					Phase: v1.PodPending,
