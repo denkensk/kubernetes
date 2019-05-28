@@ -55,7 +55,7 @@ message PriorityClass {
   // +optional
   optional string description = 4;
 
-  // PreemptionPolicy specifies whether a pod with this PriorityClass could trigger a preemption process.
+  // PreemptionPolicy is the Policy for preempting pods with lower priority.
   // This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
   // +optional
   optional string preemptionPolicy = 5;
