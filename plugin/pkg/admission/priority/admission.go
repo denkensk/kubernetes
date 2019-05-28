@@ -222,6 +222,10 @@ func (p *priorityPlugin) admitPod(a admission.Attributes) error {
 		if pod.Spec.Priority != nil && *pod.Spec.Priority != priority {
 			return admission.NewForbidden(a, fmt.Errorf("the integer value of priority (%d) must not be provided in pod spec; priority admission controller computed %d from the given PriorityClass name", *pod.Spec.Priority, priority))
 		}
+		// if the pod contained a PreemptionPolicy that differs from the one computed from the priority class, error
+		if pod.Spec.PreemptionPolicy != "" && pod.Spec.PreemptionPolicy != preemptionPolicy {
+			return admission.NewForbidden(a, fmt.Errorf("the value of preemptionPolicy (%s) must not be provided in pod spec; priority admission controller get %s from the given PriorityClass name", *pod.Spec.Priority, priority))
+		}
 		pod.Spec.Priority = &priority
 		pod.Spec.PreemptionPolicy = preemptionPolicy
 	}
