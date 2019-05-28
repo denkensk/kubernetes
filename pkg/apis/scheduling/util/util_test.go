@@ -34,8 +34,9 @@ func TestDropNonPreemptingPriority(t *testing.T) {
 		return &scheduling.PriorityClass{}
 	}
 	pcWithNonPreemptingPriority := func() *scheduling.PriorityClass {
+		preemptionPolicy := apiv1.PreemptNever
 		return &scheduling.PriorityClass{
-			PreemptionPolicy: apiv1.PreemptNever,
+			PreemptionPolicy: &preemptionPolicy,
 		}
 	}
 

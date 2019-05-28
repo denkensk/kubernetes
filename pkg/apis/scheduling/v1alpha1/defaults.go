@@ -29,7 +29,8 @@ func addDefaultingFuncs(scheme *runtime.Scheme) error {
 // SetDefaults_PriorityClass sets additional defaults compared to its counterpart
 // in extensions.
 func SetDefaults_PriorityClass(obj *v1alpha1.PriorityClass) {
-	if obj.PreemptionPolicy == "" {
-		obj.PreemptionPolicy = apiv1.PreemptLowerPriority
+	if obj.PreemptionPolicy == nil {
+		preemptLowerPriority := apiv1.PreemptLowerPriority
+		obj.PreemptionPolicy = &preemptLowerPriority
 	}
 }

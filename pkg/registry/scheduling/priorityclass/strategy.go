@@ -54,7 +54,7 @@ func (priorityClassStrategy) PrepareForUpdate(ctx context.Context, obj, old runt
 	newClass := obj.(*scheduling.PriorityClass)
 	oldClass := old.(*scheduling.PriorityClass)
 
-	schedulingutil.DropDisabledFields(oldClass, newClass)
+	schedulingutil.DropDisabledFields(newClass, oldClass)
 }
 
 // Validate validates a new PriorityClass.

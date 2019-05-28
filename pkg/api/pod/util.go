@@ -383,7 +383,7 @@ func dropDisabledFields(
 		!podPriorityInUse(oldPodSpec) {
 		// Set to nil pod's PreemptionPolicy fields if the feature is disabled and the old pod
 		// does not specify any values for these fields.
-		podSpec.PreemptionPolicy = ""
+		podSpec.PreemptionPolicy = nil
 	}
 }
 

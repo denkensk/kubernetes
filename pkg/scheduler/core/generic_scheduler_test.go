@@ -1333,6 +1333,10 @@ func TestPreempt(t *testing.T) {
 	for i := 1; i < 4; i++ {
 		nodeNames = append(nodeNames, fmt.Sprintf("machine%d", i))
 	}
+	var (
+		preemptLowerPriority = v1.PreemptLowerPriority
+		preemptNever         = v1.PreemptNever
+	)
 	tests := []struct {
 		name         string
 		pod          *v1.Pod
@@ -1346,7 +1350,7 @@ func TestPreempt(t *testing.T) {
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
 				Containers:       veryLargeContainers,
 				Priority:         &highPriority,
-				PreemptionPolicy: v1.PreemptLowerPriority},
+				PreemptionPolicy: &preemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &lowPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1362,7 +1366,7 @@ func TestPreempt(t *testing.T) {
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
 				Containers:       veryLargeContainers,
 				Priority:         &highPriority,
-				PreemptionPolicy: v1.PreemptLowerPriority},
+				PreemptionPolicy: &preemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &lowPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1378,7 +1382,7 @@ func TestPreempt(t *testing.T) {
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
 				Containers:       veryLargeContainers,
 				Priority:         &highPriority,
-				PreemptionPolicy: v1.PreemptLowerPriority},
+				PreemptionPolicy: &preemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &midPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1402,7 +1406,7 @@ func TestPreempt(t *testing.T) {
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
 				Containers:       veryLargeContainers,
 				Priority:         &highPriority,
-				PreemptionPolicy: v1.PreemptLowerPriority},
+				PreemptionPolicy: &preemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &midPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1423,7 +1427,7 @@ func TestPreempt(t *testing.T) {
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
 				Containers:       veryLargeContainers,
 				Priority:         &highPriority,
-				PreemptionPolicy: v1.PreemptLowerPriority},
+				PreemptionPolicy: &preemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &midPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1448,7 +1452,7 @@ func TestPreempt(t *testing.T) {
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
 				Containers:       veryLargeContainers,
 				Priority:         &highPriority,
-				PreemptionPolicy: v1.PreemptLowerPriority},
+				PreemptionPolicy: &preemptLowerPriority},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &midPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},
@@ -1473,7 +1477,7 @@ func TestPreempt(t *testing.T) {
 			pod: &v1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod1", UID: types.UID("pod1")}, Spec: v1.PodSpec{
 				Containers:       veryLargeContainers,
 				Priority:         &highPriority,
-				PreemptionPolicy: v1.PreemptNever},
+				PreemptionPolicy: &preemptNever},
 			},
 			pods: []*v1.Pod{
 				{ObjectMeta: metav1.ObjectMeta{Name: "m1.1", UID: types.UID("m1.1")}, Spec: v1.PodSpec{Containers: smallContainers, Priority: &lowPriority, NodeName: "machine1"}, Status: v1.PodStatus{Phase: v1.PodRunning}},

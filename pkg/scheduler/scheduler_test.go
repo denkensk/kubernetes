@@ -103,6 +103,7 @@ func (n *nodeLister) List() ([]*v1.Node, error) {
 }
 
 func podWithID(id, desiredHost string) *v1.Pod {
+	preemptLowerPriority := v1.PreemptLowerPriority
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:     id,
@@ -111,7 +112,7 @@ func podWithID(id, desiredHost string) *v1.Pod {
 		},
 		Spec: v1.PodSpec{
 			NodeName:         desiredHost,
-			PreemptionPolicy: v1.PreemptLowerPriority,
+			PreemptionPolicy: &preemptLowerPriority,
 		},
 	}
 }

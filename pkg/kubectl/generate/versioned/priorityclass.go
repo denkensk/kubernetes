@@ -87,6 +87,6 @@ func (s *PriorityClassV1Generator) StructuredGenerate() (runtime.Object, error) 
 		Value:            s.Value,
 		GlobalDefault:    s.GlobalDefault,
 		Description:      s.Description,
-		PreemptionPolicy: s.PreemptionPolicy,
+		PreemptionPolicy: &s.PreemptionPolicy,
 	}, nil
 }

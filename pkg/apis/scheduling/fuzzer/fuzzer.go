@@ -28,8 +28,9 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 	return []interface{}{
 		func(s *scheduling.PriorityClass, c fuzz.Continue) {
 			c.FuzzNoCustom(s)
-			if s.PreemptionPolicy == "" {
-				s.PreemptionPolicy = apiv1.PreemptLowerPriority
+			if s.PreemptionPolicy == nil {
+				preemptLowerPriority := apiv1.PreemptLowerPriority
+				s.PreemptionPolicy = &preemptLowerPriority
 			}
 		},
 	}

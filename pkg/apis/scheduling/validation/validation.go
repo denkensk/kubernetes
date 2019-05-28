@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	apiv1 "k8s.io/api/core/v1"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	apivalidation "k8s.io/kubernetes/pkg/apis/core/validation"
@@ -40,6 +41,12 @@ func ValidatePriorityClass(pc *scheduling.PriorityClass) field.ErrorList {
 	} else if pc.Value > scheduling.HighestUserDefinablePriority {
 		// Non-system critical priority classes are not allowed to have a value larger than HighestUserDefinablePriority.
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("value"), fmt.Sprintf("maximum allowed value of a user defined priority is %v", scheduling.HighestUserDefinablePriority)))
+	}
+
+	if pc.PreemptionPolicy != nil {
+		if *pc.PreemptionPolicy != apiv1.PreemptLowerPriority || *pc.PreemptionPolicy != apiv1.PreemptNever {
+			allErrs = append(allErrs, field.Forbidden(field.NewPath("PreemptionPolicy"), "is a valid value."))
+		}
 	}
 	return allErrs
 }
