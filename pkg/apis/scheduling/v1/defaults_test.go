@@ -53,7 +53,7 @@ func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 func TestSetDefaultPreemptionPolicy(t *testing.T) {
 	priorityClass := &v1.PriorityClass{}
 	output := roundTrip(t, runtime.Object(priorityClass)).(*v1.PriorityClass)
-	if output.PreemptionPolicy == "" || output.PreemptionPolicy != apiv1.PreemptLowerPriority {
+	if output.PreemptionPolicy == nil || *output.PreemptionPolicy != apiv1.PreemptLowerPriority {
 		t.Errorf("Expected PriorityClass.PreemptionPolicy value: %+v\ngot: %+v\n", apiv1.PreemptLowerPriority, output.PreemptionPolicy)
 	}
 }

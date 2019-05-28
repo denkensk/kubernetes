@@ -26,6 +26,10 @@ import (
 )
 
 func TestPriorityClassV1Generator(t *testing.T) {
+	var (
+		preemptLowerPriority = apiv1.PreemptLowerPriority
+		preemptNever         = apiv1.PreemptNever
+	)
 	tests := []struct {
 		name      string
 		params    map[string]interface{}
@@ -48,7 +52,7 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				Value:            int32(1000),
 				GlobalDefault:    false,
 				Description:      "high priority class",
-				PreemptionPolicy: apiv1.PreemptLowerPriority,
+				PreemptionPolicy: &preemptLowerPriority,
 			},
 			expectErr: false,
 		},
@@ -68,7 +72,7 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				Value:            int32(1000),
 				GlobalDefault:    false,
 				Description:      "high priority class",
-				PreemptionPolicy: apiv1.PreemptNever,
+				PreemptionPolicy: &preemptNever,
 			},
 			expectErr: false,
 		},
@@ -88,7 +92,7 @@ func TestPriorityClassV1Generator(t *testing.T) {
 				Value:            int32(1000),
 				GlobalDefault:    true,
 				Description:      "high priority class",
-				PreemptionPolicy: apiv1.PreemptLowerPriority,
+				PreemptionPolicy: &preemptLowerPriority,
 			},
 			expectErr: false,
 		},

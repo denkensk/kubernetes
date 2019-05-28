@@ -38,6 +38,7 @@ func noDefault(*core.Pod) error { return nil }
 func TestDecodeSinglePod(t *testing.T) {
 	grace := int64(30)
 	enableServiceLinks := v1.DefaultEnableServiceLinks
+	preemptLowerPriority := v1.PreemptLowerPriority
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "",
@@ -62,7 +63,7 @@ func TestDecodeSinglePod(t *testing.T) {
 			SecurityContext:    &v1.PodSecurityContext{},
 			SchedulerName:      core.DefaultSchedulerName,
 			EnableServiceLinks: &enableServiceLinks,
-			PreemptionPolicy:   v1.PreemptLowerPriority,
+			PreemptionPolicy:   &preemptLowerPriority,
 		},
 	}
 	json, err := runtime.Encode(testapi.Default.Codec(), pod)
@@ -103,6 +104,7 @@ func TestDecodeSinglePod(t *testing.T) {
 func TestDecodePodList(t *testing.T) {
 	grace := int64(30)
 	enableServiceLinks := v1.DefaultEnableServiceLinks
+	preemptLowerPriority := v1.PreemptLowerPriority
 	pod := &v1.Pod{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "",
@@ -128,7 +130,7 @@ func TestDecodePodList(t *testing.T) {
 			SecurityContext:    &v1.PodSecurityContext{},
 			SchedulerName:      core.DefaultSchedulerName,
 			EnableServiceLinks: &enableServiceLinks,
-			PreemptionPolicy:   v1.PreemptLowerPriority,
+			PreemptionPolicy:   &preemptLowerPriority,
 		},
 	}
 	podList := &v1.PodList{

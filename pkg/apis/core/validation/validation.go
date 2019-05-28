@@ -3034,8 +3034,8 @@ func ValidatePodSpec(spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	}
 
 	if spec.PreemptionPolicy != nil {
-		if *spec.PreemptionPolicy != v1.PreemptLowerPriority || *spec.PreemptionPolicy != v1.PreemptNever {
-			allErrs = append(allErrs, field.Forbidden(field.NewPath("PreemptionPolicy"), "is a valid value."))
+		if *spec.PreemptionPolicy != v1.PreemptLowerPriority && *spec.PreemptionPolicy != v1.PreemptNever {
+			allErrs = append(allErrs, field.Forbidden(field.NewPath("PreemptionPolicy"), "is not a valid value."))
 		}
 	}
 	return allErrs
