@@ -29,7 +29,7 @@ var Funcs = func(codecs runtimeserializer.CodecFactory) []interface{} {
 		func(s *scheduling.PriorityClass, c fuzz.Continue) {
 			c.FuzzNoCustom(s)
 			if s.PreemptionPolicy == "" {
-				s.PreemptionPolicy = apiv1.PreemptNever
+				s.PreemptionPolicy = apiv1.PreemptLowerPriority
 			}
 		},
 	}
