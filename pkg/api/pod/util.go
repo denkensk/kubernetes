@@ -381,7 +381,7 @@ func dropDisabledFields(
 
 	if !utilfeature.DefaultFeatureGate.Enabled(features.NonPreemptingPriority) &&
 		!podPriorityInUse(oldPodSpec) {
-		// Set to nil pod's Preempting fields if the feature is disabled and the old pod
+		// Set to nil pod's PreemptionPolicy fields if the feature is disabled and the old pod
 		// does not specify any values for these fields.
 		podSpec.PreemptionPolicy = ""
 	}
