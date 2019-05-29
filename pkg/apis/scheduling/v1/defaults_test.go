@@ -1,5 +1,5 @@
 /*
-Copyright 2015 The Kubernetes Authors.
+Copyright 2019 The Kubernetes Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -25,8 +25,8 @@ import (
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
 	// enforce that all types are installed
+	apiv1 "k8s.io/api/core/v1"
 	_ "k8s.io/kubernetes/pkg/api/testapi"
-	"k8s.io/kubernetes/pkg/apis/scheduling"
 )
 
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
@@ -50,10 +50,10 @@ func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 	return obj3
 }
 
-func TestSetDefaultPreempting(t *testing.T) {
+func TestSetDefaultPreemptionPolicy(t *testing.T) {
 	priorityClass := &v1.PriorityClass{}
 	output := roundTrip(t, runtime.Object(priorityClass)).(*v1.PriorityClass)
-	if output.Preempting == nil || *output.Preempting != scheduling.DefaultPreempting {
-		t.Errorf("Expected enableServiceLinks value: %+v\ngot: %+v\n", scheduling.DefaultPreempting, *output.Preempting)
+	if output.PreemptionPolicy == nil || *output.PreemptionPolicy != apiv1.PreemptLowerPriority {
+		t.Errorf("Expected PriorityClass.PreemptionPolicy value: %+v\ngot: %+v\n", apiv1.PreemptLowerPriority, output.PreemptionPolicy)
 	}
 }

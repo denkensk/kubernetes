@@ -2046,6 +2046,16 @@ const (
 	PullIfNotPresent PullPolicy = "IfNotPresent"
 )
 
+// PreemptionPolicy describes a policy for if/when to preempt a pod.
+type PreemptionPolicy string
+
+const (
+	// PreemptLowerPriority means that pod can preempt other pods with lower priority.
+	PreemptLowerPriority PreemptionPolicy = "PreemptLowerPriority"
+	// PreemptNever means that pod never preempts other pods with lower priority.
+	PreemptNever PreemptionPolicy = "Never"
+)
+
 // TerminationMessagePolicy describes how termination messages are retrieved from a container.
 type TerminationMessagePolicy string
 
@@ -2961,10 +2971,10 @@ type PodSpec struct {
 	// The higher the value, the higher the priority.
 	// +optional
 	Priority *int32 `json:"priority,omitempty" protobuf:"bytes,25,opt,name=priority"`
-	// Preempting specifies whether a pod with this PriorityClass could start a preemption process.
-	// If this field is missing, the PriorityClass is considered a Preempting class by default.
+	// PreemptionPolicy is the Policy for preempting pods with lower priority.
+	// This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
 	// +optional
-	Preempting *bool `json:"preempting,omitempty" protobuf:"bytes,31,opt,name=preempting"`
+	PreemptionPolicy *PreemptionPolicy `json:"preemptionPolicy,omitempty" protobuf:"bytes,31,opt,name=preemptionPolicy"`
 	// Specifies the DNS parameters of a pod.
 	// Parameters specified here will be merged to the generated DNS
 	// configuration based on DNSPolicy.
@@ -2995,9 +3005,6 @@ type PodSpec struct {
 const (
 	// The default value for enableServiceLinks attribute.
 	DefaultEnableServiceLinks = true
-
-	// The default value for preempting attribute.
-	DefaultPreempting = true
 )
 
 // HostAlias holds the mapping between IP and hostnames that will be injected as an entry in the
