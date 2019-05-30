@@ -1164,8 +1164,8 @@ func nodesWherePreemptionMightHelp(nodes []*v1.Node, failedPredicatesMap FailedP
 // We look at the node that is nominated for this pod and as long as there are
 // terminating pods on the node, we don't consider this for preempting more pods.
 func podEligibleToPreemptOthers(pod *v1.Pod, nodeNameToInfo map[string]*schedulernodeinfo.NodeInfo, enableNonPreempting bool) bool {
-	if enableNonPreempting && *pod.Spec.PreemptionPolicy == v1.PreemptNever {
-		klog.V(5).Infof("Pod %v/%v is no eligible for preemption, because it uses a non-preempting priority class.", pod.Namespace, pod.Name)
+	if enableNonPreempting && pod.Spec.PreemptionPolicy != nil && *pod.Spec.PreemptionPolicy == v1.PreemptNever {
+		klog.V(5).Infof("Pod %v/%v is not eligible for preemption because it has a preemptionPolicy of %v", pod.Namespace, pod.Name, v1.PreemptNever)
 		return false
 	}
 	nomNodeName := pod.Status.NominatedNodeName

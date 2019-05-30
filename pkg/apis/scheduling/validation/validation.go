@@ -20,13 +20,11 @@ import (
 	"fmt"
 	"strings"
 
-	apiv1 "k8s.io/api/core/v1"
 	apimachineryvalidation "k8s.io/apimachinery/pkg/api/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/kubernetes/pkg/apis/core"
 	apivalidation "k8s.io/kubernetes/pkg/apis/core/validation"
 	"k8s.io/kubernetes/pkg/apis/scheduling"
-	"k8s.io/kubernetes/pkg/features"
 )
 
 // ValidatePriorityClass tests whether required fields in the PriorityClass are
@@ -46,7 +44,7 @@ func ValidatePriorityClass(pc *scheduling.PriorityClass) field.ErrorList {
 	}
 
 	if pc.PreemptionPolicy != nil {
-		if *pc.PreemptionPolicy != apiv1.PreemptLowerPriority && *pc.PreemptionPolicy != apiv1.PreemptNever {
+		if *pc.PreemptionPolicy != core.PreemptLowerPriority && *pc.PreemptionPolicy != core.PreemptNever {
 			allErrs = append(allErrs, field.Forbidden(field.NewPath("PreemptionPolicy"), "is not a valid value."))
 		}
 	}
@@ -62,9 +60,6 @@ func ValidatePriorityClassUpdate(pc, oldPc *scheduling.PriorityClass) field.Erro
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("Value"), "may not be changed in an update."))
 	}
 	// PreemptionPolicy is immutable and is checked by the ObjectMeta validator.
-	if utilfeature.DefaultFeatureGate.Enabled(features.NonPreemptingPriority) && *pc.PreemptionPolicy != *oldPc.PreemptionPolicy {
-		allErrs = append(allErrs, field.Forbidden(field.NewPath("PreemptionPolicy"), "may not be changed in an update."))
-	}
-
+	allErrs = append(allErrs, apivalidation.ValidateImmutableField(pc, oldPc, field.NewPath("PreemptionPolicy"))...)
 	return allErrs
 }

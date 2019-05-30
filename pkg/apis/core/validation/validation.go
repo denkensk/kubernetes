@@ -2653,6 +2653,19 @@ func validateRestartPolicy(restartPolicy *core.RestartPolicy, fldPath *field.Pat
 	return allErrors
 }
 
+func ValidatePreemptionPolicy(preemptionPolicy *core.PreemptionPolicy, fldPath *field.Path) field.ErrorList {
+	allErrors := field.ErrorList{}
+	switch *preemptionPolicy {
+	case core.PreemptLowerPriority, core.PreemptNever:
+	case "":
+		allErrors = append(allErrors, field.Required(fldPath, ""))
+	default:
+		validValues := []string{string(core.PreemptLowerPriority), string(core.PreemptNever)}
+		allErrors = append(allErrors, field.NotSupported(fldPath, preemptionPolicy, validValues))
+	}
+	return allErrors
+}
+
 func validateDNSPolicy(dnsPolicy *core.DNSPolicy, fldPath *field.Path) field.ErrorList {
 	allErrors := field.ErrorList{}
 	switch *dnsPolicy {
@@ -2988,6 +3001,7 @@ func ValidatePodSpec(spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 	allErrs = append(allErrs, validateAffinity(spec.Affinity, fldPath.Child("affinity"))...)
 	allErrs = append(allErrs, validatePodDNSConfig(spec.DNSConfig, &spec.DNSPolicy, fldPath.Child("dnsConfig"))...)
 	allErrs = append(allErrs, validateReadinessGates(spec.ReadinessGates, fldPath.Child("readinessGates"))...)
+	allErrs = append(allErrs, ValidatePreemptionPolicy(spec.PreemptionPolicy, fldPath.Child("preemptionPolicy"))...)
 	if len(spec.ServiceAccountName) > 0 {
 		for _, msg := range ValidateServiceAccountName(spec.ServiceAccountName, false) {
 			allErrs = append(allErrs, field.Invalid(fldPath.Child("serviceAccountName"), spec.ServiceAccountName, msg))
@@ -3033,11 +3047,6 @@ func ValidatePodSpec(spec *core.PodSpec, fldPath *field.Path) field.ErrorList {
 		allErrs = append(allErrs, ValidateRuntimeClassName(*spec.RuntimeClassName, fldPath.Child("runtimeClassName"))...)
 	}
 
-	if spec.PreemptionPolicy != nil {
-		if *spec.PreemptionPolicy != v1.PreemptLowerPriority && *spec.PreemptionPolicy != v1.PreemptNever {
-			allErrs = append(allErrs, field.Forbidden(field.NewPath("PreemptionPolicy"), "is not a valid value."))
-		}
-	}
 	return allErrs
 }
 

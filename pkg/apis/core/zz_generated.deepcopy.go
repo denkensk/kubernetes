@@ -21,7 +21,6 @@ limitations under the License.
 package core
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	types "k8s.io/apimachinery/pkg/types"
@@ -3613,7 +3612,7 @@ func (in *PodSpec) DeepCopyInto(out *PodSpec) {
 	}
 	if in.PreemptionPolicy != nil {
 		in, out := &in.PreemptionPolicy, &out.PreemptionPolicy
-		*out = new(corev1.PreemptionPolicy)
+		*out = new(PreemptionPolicy)
 		**out = **in
 	}
 	if in.DNSConfig != nil {

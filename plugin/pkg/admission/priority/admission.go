@@ -31,6 +31,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	schedulingv1listers "k8s.io/client-go/listers/scheduling/v1"
+	"k8s.io/kubernetes/pkg/apis/core"
 	api "k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/apis/scheduling"
 	"k8s.io/kubernetes/pkg/features"
@@ -213,17 +214,24 @@ func (p *priorityPlugin) admitPod(a admission.Attributes) error {
 			}
 
 			priority = pc.Value
-
-			if utilfeature.DefaultFeatureGate.Enabled(features.NonPreemptingPriority) {
-				preemptionPolicy = pc.PreemptionPolicy
-			}
+			preemptionPolicy = pc.PreemptionPolicy
 		}
 		// if the pod contained a priority that differs from the one computed from the priority class, error
 		if pod.Spec.Priority != nil && *pod.Spec.Priority != priority {
 			return admission.NewForbidden(a, fmt.Errorf("the integer value of priority (%d) must not be provided in pod spec; priority admission controller computed %d from the given PriorityClass name", *pod.Spec.Priority, priority))
 		}
 		pod.Spec.Priority = &priority
-		pod.Spec.PreemptionPolicy = preemptionPolicy
+
+		if utilfeature.DefaultFeatureGate.Enabled(features.NonPreemptingPriority) {
+			var corePolicy core.PreemptionPolicy
+			if preemptionPolicy != nil {
+				corePolicy = core.PreemptionPolicy(*preemptionPolicy)
+				if pod.Spec.PreemptionPolicy != nil && *pod.Spec.PreemptionPolicy != corePolicy {
+					return admission.NewForbidden(a, fmt.Errorf("the string value of PreemptionPolicy (%s) must not be provided in pod spec; priority admission controller computed %s from the given PriorityClass name", *pod.Spec.PreemptionPolicy, corePolicy))
+				}
+				pod.Spec.PreemptionPolicy = &corePolicy
+			}
+		}
 	}
 	return nil
 }

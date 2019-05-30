@@ -24,9 +24,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kubernetes/pkg/api/legacyscheme"
 
-	// enforce that all types are installed
 	apiv1 "k8s.io/api/core/v1"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
+	// enforce that all types are installed
 	_ "k8s.io/kubernetes/pkg/api/testapi"
+	"k8s.io/kubernetes/pkg/features"
 )
 
 func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
@@ -52,6 +55,11 @@ func roundTrip(t *testing.T, obj runtime.Object) runtime.Object {
 
 func TestSetDefaultPreempting(t *testing.T) {
 	priorityClass := &v1beta1.PriorityClass{}
+
+	// set NonPreemptingPriority true
+	defer featuregatetesting.SetFeatureGateDuringTest(nil, utilfeature.DefaultFeatureGate,
+		features.NonPreemptingPriority, true)()
+
 	output := roundTrip(t, runtime.Object(priorityClass)).(*v1beta1.PriorityClass)
 	if output.PreemptionPolicy == nil || *output.PreemptionPolicy != apiv1.PreemptLowerPriority {
 		t.Errorf("Expected PriorityClass.Preempting value: %+v\ngot: %+v\n", apiv1.PreemptLowerPriority, output.PreemptionPolicy)

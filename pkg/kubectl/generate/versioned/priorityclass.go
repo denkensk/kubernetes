@@ -44,6 +44,7 @@ func (PriorityClassV1Generator) ParamNames() []generate.GeneratorParam {
 		{Name: "value", Required: true},
 		{Name: "global-default", Required: false},
 		{Name: "description", Required: false},
+		{Name: "preemption-policy", Required: false},
 	}
 }
 
@@ -72,7 +73,7 @@ func (s PriorityClassV1Generator) Generate(params map[string]interface{}) (runti
 		return nil, fmt.Errorf("expected string, found %v", description)
 	}
 
-	preemptionPolicy := apiv1.PreemptionPolicy(params["preemptionPolicy"].(string))
+	preemptionPolicy := apiv1.PreemptionPolicy(params["preemption-policy"].(string))
 
 	delegate := &PriorityClassV1Generator{Name: name, Value: value, GlobalDefault: globalDefault, Description: description, PreemptionPolicy: preemptionPolicy}
 	return delegate.StructuredGenerate()

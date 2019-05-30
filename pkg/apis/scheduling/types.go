@@ -17,8 +17,8 @@ limitations under the License.
 package scheduling
 
 import (
-	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/kubernetes/pkg/apis/core"
 )
 
 const (
@@ -71,7 +71,7 @@ type PriorityClass struct {
 	// PreemptionPolicy it the Policy for preempting pods with lower priority.
 	// This field is alpha-level and is only honored by servers that enable the NonPreemptingPriority feature.
 	// +optional
-	PreemptionPolicy *apiv1.PreemptionPolicy
+	PreemptionPolicy *core.PreemptionPolicy
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

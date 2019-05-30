@@ -5594,11 +5594,11 @@ func autoConvert_v1_PodSpec_To_core_PodSpec(in *v1.PodSpec, out *core.PodSpec, s
 	out.HostAliases = *(*[]core.HostAlias)(unsafe.Pointer(&in.HostAliases))
 	out.PriorityClassName = in.PriorityClassName
 	out.Priority = (*int32)(unsafe.Pointer(in.Priority))
-	out.PreemptionPolicy = (*v1.PreemptionPolicy)(unsafe.Pointer(in.PreemptionPolicy))
 	out.DNSConfig = (*core.PodDNSConfig)(unsafe.Pointer(in.DNSConfig))
 	out.ReadinessGates = *(*[]core.PodReadinessGate)(unsafe.Pointer(&in.ReadinessGates))
 	out.RuntimeClassName = (*string)(unsafe.Pointer(in.RuntimeClassName))
 	out.EnableServiceLinks = (*bool)(unsafe.Pointer(in.EnableServiceLinks))
+	out.PreemptionPolicy = (*core.PreemptionPolicy)(unsafe.Pointer(in.PreemptionPolicy))
 	return nil
 }
 
