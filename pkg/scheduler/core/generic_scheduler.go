@@ -499,11 +499,11 @@ func (g *genericScheduler) findNodesThatFit(ctx context.Context, state *framewor
 		// We can use the same metadata producer for all nodes.
 		meta := g.predicateMetaProducer(pod, g.nodeInfoSnapshot)
 		state.Write(migration.PredicatesStateKey, &migration.PredicatesStateData{Reference: meta})
-
+		index := rand.Intn(allNodes)
 		checkNode := func(i int) {
 			// We check the nodes starting from where we left off in the previous scheduling cycle,
 			// this is to make sure all nodes have the same chance of being examined across pods.
-			nodeInfo := g.nodeInfoSnapshot.NodeInfoList[(g.nextStartNodeIndex+i)%allNodes]
+			nodeInfo := g.nodeInfoSnapshot.NodeInfoList[(i+index)%allNodes]
 			fits, failedPredicates, status, err := g.podFitsOnNode(
 				ctx,
 				state,
@@ -539,8 +539,8 @@ func (g *genericScheduler) findNodesThatFit(ctx context.Context, state *framewor
 		// Stops searching for more nodes once the configured number of feasible nodes
 		// are found.
 		workqueue.ParallelizeUntil(ctx, 16, allNodes, checkNode)
-		processedNodes := int(filteredLen) + len(filteredNodesStatuses) + len(failedPredicateMap)
-		g.nextStartNodeIndex = (g.nextStartNodeIndex + processedNodes) % allNodes
+		//processedNodes := int(filteredLen) + len(filteredNodesStatuses) + len(failedPredicateMap)
+		//g.nextStartNodeIndex = (g.nextStartNodeIndex + processedNodes) % allNodes
 
 		filtered = filtered[:filteredLen]
 		if err := errCh.ReceiveError(); err != nil {
