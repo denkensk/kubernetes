@@ -84,7 +84,7 @@ func filterTopologySpreadConstraints(constraints []v1.TopologySpreadConstraint, 
 	return result, nil
 }
 
-func countPodsMatchSelector(podInfos []*framework.PodInfo, selector labels.Selector, ns string) int {
+func countPodsMatchSelector(podInfos map[string]*framework.PodInfo, selector labels.Selector, ns string) int {
 	count := 0
 	for _, p := range podInfos {
 		// Bypass terminating Pod (see #87621).
