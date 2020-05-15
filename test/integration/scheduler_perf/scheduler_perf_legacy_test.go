@@ -46,9 +46,9 @@ var (
 	annBindCompleted = "pv.kubernetes.io/bind-completed"
 
 	defaultTests = []struct{ nodes, existingPods, minPods int }{
-		{nodes: 500, existingPods: 500, minPods: 1000},
-		{nodes: 600, existingPods: 10000, minPods: 1000},
-		{nodes: 5000, existingPods: 5000, minPods: 1000},
+		//{nodes: 500, existingPods: 500, minPods: 1000},
+		//{nodes: 600, existingPods: 10000, minPods: 1000},
+		{nodes: 1000, existingPods: 0, minPods: 20000},
 	}
 )
 
@@ -457,7 +457,6 @@ func benchmarkScheduling(numExistingPods, minPods int,
 	config.AddStrategy(setupNamespace, numExistingPods, testPodStrategy)
 	podCreator := testutils.NewTestPodCreator(clientset, config)
 	podCreator.CreatePods()
-
 	for {
 		scheduled, err := getScheduledPods(podInformer)
 		if err != nil {
@@ -492,8 +491,11 @@ func benchmarkScheduling(numExistingPods, minPods int,
 	podCreator = testutils.NewTestPodCreator(clientset, config)
 	podCreator.CreatePods()
 
+	time1 := time.Now()
+	klog.Infof("111 %v", time1)
 	<-completedCh
-
+	time2 := time.Now()
+	klog.Infof("111 %v", time2.Sub(time1).Seconds())
 	// Note: without this line we're taking the overhead of defer() into account.
 	b.StopTimer()
 }

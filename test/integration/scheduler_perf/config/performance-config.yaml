@@ -5,12 +5,12 @@
     podsToSchedule:
       podTemplatePath: config/pod-default.yaml
   params:
-  - numNodes: 500
-    numInitPods: [500]
-    numPodsToSchedule: 1000
-  - numNodes: 5000
-    numInitPods: [5000]
-    numPodsToSchedule: 1000
+#  - numNodes: 500
+#    numInitPods: [500]
+#    numPodsToSchedule: 1000
+  - numNodes: 1000
+    numInitPods: [0]
+    numPodsToSchedule: 20000
 - template:
     desc: SchedulingPodAntiAffinity
     nodes:
