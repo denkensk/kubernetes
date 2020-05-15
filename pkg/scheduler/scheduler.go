@@ -22,6 +22,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"os"
+	"sync"
 	"time"
 
 	v1 "k8s.io/api/core/v1"
@@ -373,8 +374,18 @@ func (sched *Scheduler) Run(ctx context.Context) {
 	if !cache.WaitForCacheSync(ctx.Done(), sched.scheduledPodsHasSynced) {
 		return
 	}
+	var wg sync.WaitGroup
 	sched.SchedulingQueue.Run()
-	wait.UntilWithContext(ctx, sched.scheduleOne, 0)
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func(j int) {
+			defer wg.Done()
+			for {
+				sched.scheduleOne(ctx, j)
+			}
+		}(i)
+	}
+	wg.Wait()
 	sched.SchedulingQueue.Close()
 }
 
@@ -554,7 +565,7 @@ func (sched *Scheduler) finishBinding(prof *profile.Profile, assumed *v1.Pod, ta
 }
 
 // scheduleOne does the entire scheduling workflow for a single pod.  It is serialized on the scheduling algorithm's host fitting.
-func (sched *Scheduler) scheduleOne(ctx context.Context) {
+func (sched *Scheduler) scheduleOne(ctx context.Context, i int) {
 	podInfo := sched.NextPod()
 	// pod could be nil when schedulerQueue is closed
 	if podInfo == nil || podInfo.Pod == nil {
@@ -580,7 +591,7 @@ func (sched *Scheduler) scheduleOne(ctx context.Context) {
 	state.SetRecordPluginMetrics(rand.Intn(100) < pluginMetricsSamplePercent)
 	schedulingCycleCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	scheduleResult, err := sched.Algorithm.Schedule(schedulingCycleCtx, prof, state, pod)
+	scheduleResult, err := sched.Algorithm.Schedule(schedulingCycleCtx, prof, state, pod, i)
 	if err != nil {
 		// Schedule() may have failed because the pod would not fit on any host, so we try to
 		// preempt, with the expectation that the next time the pod is tried for scheduling it

@@ -100,7 +100,7 @@ func (f *FitError) Error() string {
 // onto machines.
 // TODO: Rename this type.
 type ScheduleAlgorithm interface {
-	Schedule(context.Context, *profile.Profile, *framework.CycleState, *v1.Pod) (scheduleResult ScheduleResult, err error)
+	Schedule(context.Context, *profile.Profile, *framework.CycleState, *v1.Pod, int) (scheduleResult ScheduleResult, err error)
 	// Preempt receives scheduling errors for a pod and tries to create room for
 	// the pod by preempting lower priority pods if possible.
 	// It returns the node where preemption happened, a list of preempted pods, a
@@ -144,7 +144,7 @@ func (g *genericScheduler) snapshot() error {
 // Schedule tries to schedule the given pod to one of the nodes in the node list.
 // If it succeeds, it will return the name of the node.
 // If it fails, it will return a FitError error with reasons.
-func (g *genericScheduler) Schedule(ctx context.Context, prof *profile.Profile, state *framework.CycleState, pod *v1.Pod) (result ScheduleResult, err error) {
+func (g *genericScheduler) Schedule(ctx context.Context, prof *profile.Profile, state *framework.CycleState, pod *v1.Pod, i int) (result ScheduleResult, err error) {
 	trace := utiltrace.New("Scheduling", utiltrace.Field{Key: "namespace", Value: pod.Namespace}, utiltrace.Field{Key: "name", Value: pod.Name})
 	defer trace.LogIfLong(100 * time.Millisecond)
 
@@ -164,7 +164,7 @@ func (g *genericScheduler) Schedule(ctx context.Context, prof *profile.Profile, 
 
 	// Run "prefilter" plugins.
 	startPredicateEvalTime := time.Now()
-	filteredNodes, filteredNodesStatuses, err := g.findNodesThatFitPod(ctx, prof, state, pod)
+	filteredNodes, filteredNodesStatuses, err := g.findNodesThatFitPod(ctx, prof, state, pod, i)
 	if err != nil {
 		return result, err
 	}
@@ -395,14 +395,14 @@ func (g *genericScheduler) numFeasibleNodesToFind(numAllNodes int32) (numNodes i
 
 // Filters the nodes to find the ones that fit the pod based on the framework
 // filter plugins and filter extenders.
-func (g *genericScheduler) findNodesThatFitPod(ctx context.Context, prof *profile.Profile, state *framework.CycleState, pod *v1.Pod) ([]*v1.Node, framework.NodeToStatusMap, error) {
+func (g *genericScheduler) findNodesThatFitPod(ctx context.Context, prof *profile.Profile, state *framework.CycleState, pod *v1.Pod, i int) ([]*v1.Node, framework.NodeToStatusMap, error) {
 	s := prof.RunPreFilterPlugins(ctx, state, pod)
 	if !s.IsSuccess() {
 		return nil, nil, s.AsError()
 	}
 
 	filteredNodesStatuses := make(framework.NodeToStatusMap)
-	filtered, err := g.findNodesThatPassFilters(ctx, prof, state, pod, filteredNodesStatuses)
+	filtered, err := g.findNodesThatPassFilters(ctx, prof, state, pod, filteredNodesStatuses, i)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -415,7 +415,7 @@ func (g *genericScheduler) findNodesThatFitPod(ctx context.Context, prof *profil
 }
 
 // findNodesThatPassFilters finds the nodes that fit the filter plugins.
-func (g *genericScheduler) findNodesThatPassFilters(ctx context.Context, prof *profile.Profile, state *framework.CycleState, pod *v1.Pod, statuses framework.NodeToStatusMap) ([]*v1.Node, error) {
+func (g *genericScheduler) findNodesThatPassFilters(ctx context.Context, prof *profile.Profile, state *framework.CycleState, pod *v1.Pod, statuses framework.NodeToStatusMap, j int) ([]*v1.Node, error) {
 	allNodes, err := g.nodeInfoSnapshot.NodeInfos().List()
 	if err != nil {
 		return nil, err
@@ -427,13 +427,13 @@ func (g *genericScheduler) findNodesThatPassFilters(ctx context.Context, prof *p
 	// and allow assigning.
 	filtered := make([]*v1.Node, numNodesToFind)
 
-	if !prof.HasFilterPlugins() {
-		for i := range filtered {
-			filtered[i] = allNodes[i].Node()
-		}
-		g.nextStartNodeIndex = (g.nextStartNodeIndex + len(filtered)) % len(allNodes)
-		return filtered, nil
-	}
+	//if !prof.HasFilterPlugins() {
+	//	for i := range filtered {
+	//		filtered[i] = allNodes[i].Node()
+	//	}
+	//	g.nextStartNodeIndex = (g.nextStartNodeIndex + len(filtered)) % len(allNodes)
+	//	return filtered, nil
+	//}
 
 	errCh := parallelize.NewErrorChannel()
 	var statusesLock sync.Mutex
@@ -442,7 +442,7 @@ func (g *genericScheduler) findNodesThatPassFilters(ctx context.Context, prof *p
 	checkNode := func(i int) {
 		// We check the nodes starting from where we left off in the previous scheduling cycle,
 		// this is to make sure all nodes have the same chance of being examined across pods.
-		nodeInfo := allNodes[(g.nextStartNodeIndex+i)%len(allNodes)]
+		nodeInfo := allNodes[j*500+i]
 		fits, status, err := g.podPassesFiltersOnNode(ctx, prof, state, pod, nodeInfo)
 		if err != nil {
 			errCh.SendErrorWithCancel(err, cancel)
@@ -476,9 +476,9 @@ func (g *genericScheduler) findNodesThatPassFilters(ctx context.Context, prof *p
 
 	// Stops searching for more nodes once the configured number of feasible nodes
 	// are found.
-	parallelize.Until(ctx, len(allNodes), checkNode)
-	processedNodes := int(filteredLen) + len(statuses)
-	g.nextStartNodeIndex = (g.nextStartNodeIndex + processedNodes) % len(allNodes)
+	parallelize.Until(ctx, 500, checkNode)
+	//processedNodes := int(filteredLen) + len(statuses)
+	//g.nextStartNodeIndex = (g.nextStartNodeIndex + processedNodes) % 250
 
 	filtered = filtered[:filteredLen]
 	if err := errCh.ReceiveError(); err != nil {
