@@ -442,7 +442,7 @@ func (g *genericScheduler) findNodesThatPassFilters(ctx context.Context, prof *p
 	checkNode := func(i int) {
 		// We check the nodes starting from where we left off in the previous scheduling cycle,
 		// this is to make sure all nodes have the same chance of being examined across pods.
-		nodeInfo := allNodes[j*500+i]
+		nodeInfo := allNodes[j*250+i]
 		fits, status, err := g.podPassesFiltersOnNode(ctx, prof, state, pod, nodeInfo)
 		if err != nil {
 			errCh.SendErrorWithCancel(err, cancel)
@@ -476,7 +476,7 @@ func (g *genericScheduler) findNodesThatPassFilters(ctx context.Context, prof *p
 
 	// Stops searching for more nodes once the configured number of feasible nodes
 	// are found.
-	parallelize.Until(ctx, 500, checkNode)
+	parallelize.Until(ctx, 250, checkNode)
 	//processedNodes := int(filteredLen) + len(statuses)
 	//g.nextStartNodeIndex = (g.nextStartNodeIndex + processedNodes) % 250
 

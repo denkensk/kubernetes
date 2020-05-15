@@ -376,7 +376,7 @@ func (sched *Scheduler) Run(ctx context.Context) {
 	}
 	var wg sync.WaitGroup
 	sched.SchedulingQueue.Run()
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		go func(j int) {
 			defer wg.Done()
