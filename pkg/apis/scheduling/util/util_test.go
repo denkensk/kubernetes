@@ -22,11 +22,8 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/util/diff"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
-	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"k8s.io/kubernetes/pkg/apis/core"
 	"k8s.io/kubernetes/pkg/apis/scheduling"
-	"k8s.io/kubernetes/pkg/features"
 )
 
 func TestDropNonPreemptingPriority(t *testing.T) {
@@ -72,8 +69,6 @@ func TestDropNonPreemptingPriority(t *testing.T) {
 				}
 
 				t.Run(fmt.Sprintf("feature enabled=%v, old PriorityClass %v, new PriorityClass %v", enabled, oldPriorityClassInfo.description, newPriorityClassInfo.description), func(t *testing.T) {
-					defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NonPreemptingPriority, enabled)()
-
 					DropDisabledFields(newPriorityClass, oldPriorityClass)
 
 					// old PriorityClass should never be changed
