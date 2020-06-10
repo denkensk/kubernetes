@@ -72,9 +72,9 @@ func TestDropNonPreemptingPriority(t *testing.T) {
 				}
 
 				t.Run(fmt.Sprintf("feature enabled=%v, old PriorityClass %v, new PriorityClass %v", enabled, oldPriorityClassInfo.description, newPriorityClassInfo.description), func(t *testing.T) {
-					DropDisabledFields(newPriorityClass, oldPriorityClass)
-
 					defer featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.NonPreemptingPriority, enabled)()
+
+					DropDisabledFields(newPriorityClass, oldPriorityClass)
 					// old PriorityClass should never be changed
 					if !reflect.DeepEqual(oldPriorityClass, oldPriorityClassInfo.pc()) {
 						t.Errorf("old PriorityClass changed: %v", diff.ObjectReflectDiff(oldPriorityClass, oldPriorityClassInfo.pc()))
