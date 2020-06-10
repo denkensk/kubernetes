@@ -165,6 +165,9 @@ func TestDefaulting(t *testing.T) {
 		{Group: "scheduling.k8s.io", Version: "v1alpha1", Kind: "PriorityClass"}:                                {},
 		{Group: "scheduling.k8s.io", Version: "v1beta1", Kind: "PriorityClass"}:                                 {},
 		{Group: "scheduling.k8s.io", Version: "v1", Kind: "PriorityClass"}:                                      {},
+		{Group: "scheduling.k8s.io", Version: "v1alpha1", Kind: "PriorityClassList"}:                                  {},
+		{Group: "scheduling.k8s.io", Version: "v1beta1", Kind: "PriorityClassList"}:                                  {},
+		{Group: "scheduling.k8s.io", Version: "v1", Kind: "PriorityClassList"}:                                  {},
 	}
 
 	f := fuzz.New().NilChance(.5).NumElements(1, 1).RandSource(rand.NewSource(1))
