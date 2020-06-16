@@ -18,7 +18,7 @@ package v1
 
 import (
 	apiv1 "k8s.io/api/core/v1"
-	"k8s.io/api/scheduling/v1"
+	v1 "k8s.io/api/scheduling/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"k8s.io/kubernetes/pkg/features"
