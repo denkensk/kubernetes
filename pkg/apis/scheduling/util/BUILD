@@ -10,11 +10,7 @@ go_library(
     name = "go_default_library",
     srcs = ["util.go"],
     importpath = "k8s.io/kubernetes/pkg/apis/scheduling/util",
-    deps = [
-        "//pkg/apis/scheduling:go_default_library",
-        "//pkg/features:go_default_library",
-        "//staging/src/k8s.io/apiserver/pkg/util/feature:go_default_library",
-    ],
+    deps = ["//pkg/apis/scheduling:go_default_library"],
 )
 
 filegroup(
